@@ -1,0 +1,8 @@
+procs:
+  backend:
+    shell: "bun run dev:backend"
+    autorestart: true
+  
+  frontend:
+    shell: "bun run dev:frontend"
+    autorestart: true

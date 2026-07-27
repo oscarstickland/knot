@@ -1,0 +1,27 @@
+{
+  "name": "@knot/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "build": "bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
+    "start": "NODE_ENV=production bun src/index.ts"
+  },
+  "dependencies": {
+    "@ant-design/icons": "6.x",
+    "@knot/backend": "workspace:*",
+    "antd": "^6.5.2",
+    "axios": "^1.18.1",
+    "react": "^19",
+    "react-dom": "^19",
+    "react-router": "^8.2.0",
+    "swr": "^2.4.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19",
+    "@types/react-dom": "^19"
+  }
+}

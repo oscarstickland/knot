@@ -1,0 +1,21 @@
+{
+  "name": "knot",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "bun --filter @knot/backend dev",
+    "dev:generate": "cd backend && bun run db/populate.ts",
+    "dev:frontend": "bun --filter @knot/frontend dev"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
