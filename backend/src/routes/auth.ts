@@ -1,19 +1,19 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
-
-import { LoginUserSchema } from "../types/users";
-import { attachDatabase, type DbEnv } from "../db/connection";
-import { usersTable } from "../db/schema";
-import { AUTH_COOKIE_NAME, JWT_SECRET, verifyPassword } from "../services/auth";
-import { JWTUserSchema } from "../types/auth";
 import type z from "zod";
 import { sign } from "hono/jwt";
 import { deleteCookie, setCookie } from "hono/cookie";
 
+import { LoginFormSchema, type CurrentUserData } from "../types/auth";
+import { type DbEnv } from "../db/connection";
+import { usersTable } from "../db/schema";
+import { AUTH_COOKIE_NAME, JWT_SECRET, verifyPassword } from "../services/auth";
+import { JWTUserSchema } from "../types/auth";
+
 const authApp = new Hono<DbEnv>();
 
-authApp.post("/login", zValidator("json", LoginUserSchema), async (c) => {
+authApp.post("/login", zValidator("json", LoginFormSchema), async (c) => {
     const db = c.get("db");
     const data = c.req.valid('json');
 
@@ -43,7 +43,13 @@ authApp.post("/login", zValidator("json", LoginUserSchema), async (c) => {
         httpOnly: true
     });
 
-    return c.json({});
+    const response: CurrentUserData = {
+        id: user.id,
+        name: user.name,
+        email: user.email
+    }
+
+    return c.json(response, 200);
 });
 
 authApp.post("/logout", async (c) => {

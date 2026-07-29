@@ -6,7 +6,11 @@ import { attachDatabase } from "./db/connection";
 
 const app = new Hono();
 
-app.use("*", cors());
+app.use("*", cors({
+    origin: "http://localhost:8080",
+    credentials: true,
+    allowMethods: ["GET", "POST"]
+}));
 app.use("*", attachDatabase);
 
 app.route("/user", userApp);

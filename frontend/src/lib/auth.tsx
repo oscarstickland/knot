@@ -1,7 +1,7 @@
 import type { CurrentUserData } from "@knot/backend/auth";
 import { createContext, useContext, useEffect, useState } from "react"
 import { Outlet } from "react-router";
-import useSWR from "swr";
+import useSWR, { type KeyedMutator } from "swr";
 
 enum AuthStatus {
     LOADING = "loading",
@@ -9,23 +9,25 @@ enum AuthStatus {
     AUTHENTICATED = "auth"
 }
 
-type AuthState = 
-    | { status: AuthStatus.LOADING }
-    | { status: AuthStatus.UNAUTHENTICATED }
-    | { status: AuthStatus.AUTHENTICATED; user: CurrentUserData };
+type OptionalAuthMutator = { mutator: KeyedMutator<CurrentUserData> | null };
 
-const AuthContext = createContext<AuthState>({ status: AuthStatus.LOADING });
+type AuthState = 
+    | { status: AuthStatus.LOADING } & OptionalAuthMutator
+    | { status: AuthStatus.UNAUTHENTICATED } & OptionalAuthMutator
+    | { status: AuthStatus.AUTHENTICATED; user: CurrentUserData } & OptionalAuthMutator;
+
+const AuthContext = createContext<AuthState>({ status: AuthStatus.LOADING, mutator: null });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const {data, isLoading, error} = useSWR<CurrentUserData>("/user/me");
+    const {data, isLoading, error, mutate } = useSWR<CurrentUserData>("/user/me");
 
     let authState: AuthState;
     if (isLoading) {
-        authState = { status: AuthStatus.LOADING }
+        authState = { status: AuthStatus.LOADING, mutator: mutate }
     } else if (error || !data) {
-        authState = { status: AuthStatus.UNAUTHENTICATED }
+        authState = { status: AuthStatus.UNAUTHENTICATED, mutator: mutate }
     } else {
-        authState = { status: AuthStatus.AUTHENTICATED, user: data }
+        authState = { status: AuthStatus.AUTHENTICATED, user: data, mutator: mutate }
     }
 
     return (
@@ -50,4 +52,9 @@ export function useUser() {
         throw Error("User should be authenticated before using this hook.")
 
     return status.user;
+}
+
+export function useUserMutate() {
+    const status = useContext(AuthContext);
+    return status.mutator;
 }

@@ -10,11 +10,13 @@
   },
   "dependencies": {
     "@ant-design/icons": "6.x",
+    "@hookform/resolvers": "^5.5.7",
     "@knot/backend": "workspace:*",
     "antd": "^6.5.2",
     "axios": "^1.18.1",
     "react": "^19",
     "react-dom": "^19",
+    "react-hook-form": "^7.83.0",
     "react-router": "^8.2.0",
     "swr": "^2.4.2",
     "zod": "^4.4.3"

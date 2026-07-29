@@ -34,7 +34,7 @@ async function generateData() {
     console.log("-- Inserting User");
     const user1: typeof usersTable.$inferInsert = {
         name: "Caleb Lau",
-        email: "lausy@gmail.com",
+        email: "admin@gmail.com",
         password: await hashPassword("password"),
         clubId: insertedClub1!.id
     };
