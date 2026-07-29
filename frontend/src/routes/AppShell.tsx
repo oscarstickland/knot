@@ -3,6 +3,7 @@ import { Avatar, Breadcrumb, Button, Layout, Menu, theme, Typography, type MenuP
 import { Outlet, useNavigate } from "react-router";
 import React from "react";
 import { AxiosInstance } from "@/lib/fetcher";
+import { StepBackwardOutlined, UserOutlined } from "@ant-design/icons";
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
@@ -70,7 +71,8 @@ export const AppShell: React.FC = () => {
                         items={items1}
                     />
                     <div style={{ borderTop: "1px solid", borderColor: token.colorBorderSecondary }}>
-                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.5em" }}>
+                            <Avatar icon={<UserOutlined />} shape="square" />
                             <p>{user.name}</p>
                             <Button onClick={() => logout()}>Logout</Button>
                         </div>

@@ -1,6 +1,5 @@
 import type { CurrentUserData } from "@knot/backend/auth";
-import { createContext, useContext, useEffect, useState } from "react"
-import { Outlet } from "react-router";
+import { createContext, useContext } from "react"
 import useSWR, { type KeyedMutator } from "swr";
 
 enum AuthStatus {

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --hot src/index.ts",
+    "dev": "vite",
+    "dev:old": "bun --hot src/index.ts",
     "build": "bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
     "start": "NODE_ENV=production bun src/index.ts"
   },
@@ -23,7 +24,10 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/node": "^26.1.2",
     "@types/react": "^19",
-    "@types/react-dom": "^19"
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.4",
+    "vite": "^8.1.5"
   }
 }
