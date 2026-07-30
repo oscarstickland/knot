@@ -53,7 +53,7 @@ export const AppShell: React.FC = () => {
                         background: token.colorBgContainer,
                         padding: "18px 10px",
                         gap: "0.5em",
-                        textAlign: "left"
+                        textAlign: "center"
                     }}>
                         <Title 
                             level={3}
