@@ -5,13 +5,15 @@ import { RequireAuth } from "./lib/auth";
 import { AppShell } from "./routes/AppShell";
 import { DashboardPage } from "./routes/DashboardPage";
 import { LoginPage } from "./routes/login/LoginPage";
+import {EventsListPage} from "@/routes/EventsListPage.tsx";
 
 export function Root() {
   return <Routes>
     <Route index element={<IndexPage />} />
 
     <Route path="/app" element={<RequireAuth><AppShell /></RequireAuth>}>
-      <Route index element={<DashboardPage />} />
+        <Route index element={<DashboardPage />} />
+        <Route path="events" element={<EventsListPage />} />
     </Route>
 
     <Route path="/auth/login" element={<LoginPage />} />

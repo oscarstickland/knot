@@ -1,8 +1,8 @@
-import { Layout, theme, Typography } from "antd"
+import {Layout, theme, Typography} from "antd";
 
 const { Text } = Typography;
 
-export function DashboardPage() {
+export function EventsListPage() {
     const { token } = theme.useToken();
 
     return <Layout style={{ padding: "24px 24px" }}>
@@ -13,7 +13,7 @@ export function DashboardPage() {
                 borderRadius: token.borderRadiusLG
             }}
         >
-            <Text>Dashboard Page</Text>
+            <Text>Events Page</Text>
         </Layout>
     </Layout>
 }

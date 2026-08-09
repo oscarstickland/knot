@@ -1,6 +1,6 @@
 import { useUser, useUserMutate } from "@/lib/auth";
 import { Avatar, Breadcrumb, Button, Layout, Menu, Tag, theme, Typography, type MenuProps } from "antd";
-import { Outlet, useNavigate } from "react-router";
+import {Outlet, useLocation, useNavigate} from "react-router";
 import React from "react";
 import { AxiosInstance } from "@/lib/fetcher";
 import {
@@ -61,14 +61,20 @@ function useMenuItems(): MenuProps['items'] {
 }
 
 export const AppShell: React.FC = () => {
+    const location = useLocation();
     const { token } = theme.useToken();
+    const navigate = useNavigate();
     const user = useUser();
     const menuItems = useMenuItems();
+
+    const onMenuClick: MenuProps['onClick'] = (info) => {
+        navigate(info.key);
+    }
 
     return (
         <Layout style={{minHeight: "100vh"}}>
             <Sider
-                width={250} 
+                width={250}
                 style={{ 
                     background: token.colorBgContainer,
                     borderRight: "1px solid",
@@ -93,10 +99,10 @@ export const AppShell: React.FC = () => {
                         </Text>
                     </div>
                     <Menu
-                        defaultSelectedKeys={['1']}
-                        defaultOpenKeys={['sub1']}
                         style={{ flexGrow: 1, borderRight: "none" }}
                         items={menuItems}
+                        selectedKeys={[location.pathname]}
+                        onClick={onMenuClick}
                     />
                     <div style={{ borderTop: "1px solid", borderColor: token.colorBorderSecondary }}>
                         <CurrentUser />
