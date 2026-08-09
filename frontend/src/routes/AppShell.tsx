@@ -3,7 +3,14 @@ import { Avatar, Breadcrumb, Button, Layout, Menu, Tag, theme, Typography, type 
 import { Outlet, useNavigate } from "react-router";
 import React from "react";
 import { AxiosInstance } from "@/lib/fetcher";
-import {LogoutOutlined, StepBackwardOutlined, UserOutlined} from "@ant-design/icons";
+import {
+    BankOutlined, CalendarOutlined,
+    HomeOutlined,
+    LogoutOutlined,
+    SettingOutlined,
+    StepBackwardOutlined,
+    UserOutlined
+} from "@ant-design/icons";
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
@@ -13,28 +20,68 @@ const items1: MenuProps['items'] = ['1', '2', '3'].map((key) => ({
   label: `nav ${key}`,
 }));
 
+function useMenuItems(): MenuProps['items'] {
+    const user = useUser();
+
+
+    const dashboard: MenuProps['items'] = [{
+        key: "/app",
+        icon: <HomeOutlined />,
+        label: "Dashboard"
+    }]
+
+    const getPrimaryItems = (): MenuProps['items'] => {
+        let result: MenuProps['items'] = [];
+
+        if (user.role === 'admin' || user.role === 'exec') {
+            // Budgeting - if user is admin or exec
+            result.push({
+                key: "/app/budget",
+                icon: <BankOutlined />,
+                label: "Budgeting"
+            });
+        }
+
+        // Events - all users
+        result.push({
+            key: "/app/events",
+            icon: <CalendarOutlined />,
+            label: "Events"
+        });
+
+        // Admin Panel - if user is admin
+        if (user.role === 'admin') {
+            result.push({
+                key: "/app/admin",
+                icon: <SettingOutlined />,
+                label: "Admin Settings"
+            });
+        }
+
+        return result
+    }
+
+    return [
+        ...dashboard,
+        ...getPrimaryItems(),
+    ]
+}
+
 export const AppShell: React.FC = () => {
     const { token } = theme.useToken();
+    const menuItems = useMenuItems();
 
     return (
-        <Layout
-            style={{
-                minHeight: "100vh"
-            }}
-        >
+        <Layout style={{minHeight: "100vh"}}>
             <Sider 
                 width={250} 
                 style={{ 
-                    background: token.colorBgContainer, 
-                    borderRight: "1px solid", 
+                    background: token.colorBgContainer,
+                    borderRight: "1px solid",
                     borderColor: token.colorBorderSecondary
                 }}
             >
-                <div style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    minHeight: "100vh"
-                }}>
+                <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
                     <div style={{ 
                         display: "flex", 
                         alignItems: "center",
@@ -44,20 +91,18 @@ export const AppShell: React.FC = () => {
                         gap: "0.5em",
                         textAlign: "center"
                     }}>
-                        <Title 
-                            level={3}
-                            style={{ background: token.colorBgContainer, margin: 0 }}
-                        >Insert Club Name</Title>
-                        <Text 
-                            style={{ background: token.colorBgContainer, margin: 0, color: token.colorTextTertiary }}
-                        >Powered by Knot</Text>
+                        <Title level={3} style={{ background: token.colorBgContainer, margin: 0 }}>
+                            Insert Club Name
+                        </Title>
+                        <Text style={{ background: token.colorBgContainer, margin: 0, color: token.colorTextTertiary }}>
+                            Powered by Knot
+                        </Text>
                     </div>
                     <Menu
-                    
                         defaultSelectedKeys={['1']}
                         defaultOpenKeys={['sub1']}
                         style={{ flexGrow: 1, borderRight: "none" }}
-                        items={items1}
+                        items={menuItems}
                     />
                     <div style={{ borderTop: "1px solid", borderColor: token.colorBorderSecondary }}>
                         <CurrentUser />
@@ -66,7 +111,6 @@ export const AppShell: React.FC = () => {
                 </div>
             </Sider>
             <Outlet />
-            
         </Layout>
     );
 };
