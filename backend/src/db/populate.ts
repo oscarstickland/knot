@@ -31,14 +31,33 @@ async function generateData() {
     const [insertedClub1] = await db.insert(clubsTable).values(club1).returning();
 
     
-    console.log("-- Inserting User");
+    console.log("-- Inserting Users");
     const user1: typeof usersTable.$inferInsert = {
         name: "Caleb Lau",
         email: "admin@gmail.com",
         password: await hashPassword("password"),
+        role: "admin",
         clubId: insertedClub1!.id
     };
     await db.insert(usersTable).values(user1);
+
+    const user2: typeof usersTable.$inferInsert = {
+        name: "Wesley Tang",
+        email: "exec@gmail.com",
+        password: await hashPassword("password"),
+        role: "exec",
+        clubId: insertedClub1!.id
+    };
+    await db.insert(usersTable).values(user2);
+
+    const user3: typeof usersTable.$inferInsert = {
+        name: "Flynn Tiong",
+        email: "standard@gmail.com",
+        password: await hashPassword("password"),
+        role: "standard",
+        clubId: insertedClub1!.id
+    };
+    await db.insert(usersTable).values(user3);
 
     await pool.end();
 }

@@ -1,5 +1,8 @@
 import { defineRelations } from "drizzle-orm";
-import { integer, pgTable, varchar } from "drizzle-orm/pg-core";
+import {integer, pgEnum, pgTable, varchar} from "drizzle-orm/pg-core";
+
+export const userRoles = ["standard", "exec", "admin"] as const;
+export const rolesEnum = pgEnum("roles", userRoles);
 
 export const clubsTable = pgTable("clubs", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
@@ -11,6 +14,7 @@ export const usersTable = pgTable("users", {
     name: varchar({ length: 255 }).notNull(),
     email: varchar({ length: 255 }).notNull().unique(),
     password: varchar({ length: 500 }).notNull(),
+    role: rolesEnum().default("standard").notNull(),
     clubId: integer("club_id").notNull(),
 })
 

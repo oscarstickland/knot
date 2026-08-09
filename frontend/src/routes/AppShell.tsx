@@ -1,9 +1,9 @@
 import { useUser, useUserMutate } from "@/lib/auth";
-import { Avatar, Breadcrumb, Button, Layout, Menu, theme, Typography, type MenuProps } from "antd";
+import { Avatar, Breadcrumb, Button, Layout, Menu, Tag, theme, Typography, type MenuProps } from "antd";
 import { Outlet, useNavigate } from "react-router";
 import React from "react";
 import { AxiosInstance } from "@/lib/fetcher";
-import { StepBackwardOutlined, UserOutlined } from "@ant-design/icons";
+import {LogoutOutlined, StepBackwardOutlined, UserOutlined} from "@ant-design/icons";
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
@@ -14,18 +14,7 @@ const items1: MenuProps['items'] = ['1', '2', '3'].map((key) => ({
 }));
 
 export const AppShell: React.FC = () => {
-    const user = useUser();
-    const navigate = useNavigate();
-    const userMutate = useUserMutate();
     const { token } = theme.useToken();
-
-    const logout = () => {
-        AxiosInstance.post("/auth/logout")
-        .finally(() => {
-            if (userMutate) userMutate();
-            return navigate("/");
-        })
-    }
 
     return (
         <Layout
@@ -71,11 +60,7 @@ export const AppShell: React.FC = () => {
                         items={items1}
                     />
                     <div style={{ borderTop: "1px solid", borderColor: token.colorBorderSecondary }}>
-                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.5em" }}>
-                            <Avatar icon={<UserOutlined />} shape="square" />
-                            <p>{user.name}</p>
-                            <Button onClick={() => logout()}>Logout</Button>
-                        </div>
+                        <CurrentUser />
                     </div>
 
                 </div>
@@ -85,3 +70,37 @@ export const AppShell: React.FC = () => {
         </Layout>
     );
 };
+
+function CurrentUser() {
+    const navigate = useNavigate();
+    const user = useUser();
+    const userMutate = useUserMutate();
+
+    const logout = () => {
+        AxiosInstance.post("/auth/logout")
+            .finally(() => {
+                if (userMutate) userMutate();
+                return navigate("/");
+            })
+    }
+
+    return <div
+        style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.5em", padding: "0.5em 1em" }}
+    >
+        <div style={{ display: "flex", alignItems: "center", flexGrow: 1, gap: "0.5em" }}>
+            <Avatar icon={<UserOutlined />} shape="square" size="default" />
+            <div>
+                <Text strong ellipsis style={{ fontSize: "14px", lineHeight: "1.2" }}>{user.name}</Text>
+                <div>
+                    <Tag
+                        color={user.role === "admin" ? "red" : ( user.role === "exec" ? "blue" : "default")}
+                        style={{ margin: 0, fontSize: "10px", lineHeight: "16px", padding: "0 6px" }}
+                    >
+                        {user.role.toUpperCase()}
+                    </Tag>
+                </div>
+            </div>
+        </div>
+        <Button type="text" danger icon={<LogoutOutlined />} title="Logout" onClick={logout} />
+    </div>;
+}

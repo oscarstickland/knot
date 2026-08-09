@@ -23,7 +23,8 @@ app.route("/api/user", userApp);
 app.route("/api/auth", authApp);
 
 // Serve the frontend
+
 app.use("/*", serveStatic({ root: "./dist" }))
-app.use("*", serveStatic({ root: "./dist/index.html" }))
+app.get("*", serveStatic({ path: "./dist/index.html" }))
 
 export default app;

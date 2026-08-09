@@ -21,7 +21,7 @@ export type UserEnv = {
 export const isAuthenticated = createMiddleware<UserEnv & DbEnv>(async (c, next) => {
     const db = c.get("db");
 
-    // Retrive cookie
+    // Retrieve cookie
     const jwt = getCookie(c, AUTH_COOKIE_NAME);
     if (!jwt) throw new HTTPException(401);
 
@@ -58,7 +58,7 @@ export const isAuthenticated = createMiddleware<UserEnv & DbEnv>(async (c, next)
     }
 
     // Set the user on the request so the route can access it
-    c.set("user", {id: user.id, name: user.name, email: user.email})
+    c.set("user", {id: user.id, name: user.name, email: user.email, role: user.role})
 
     await next();
 });
