@@ -1,4 +1,4 @@
-import {Button, Form, Input, Layout, Modal, notification, Result, Spin, theme, Typography} from "antd";
+import {Button, DatePicker, Form, Input, Layout, Modal, notification, Result, Spin, theme, Typography} from "antd";
 import {useParams} from "react-router";
 import useSWR, {mutate} from "swr";
 import {type ClubEvent, type UpdateEventData, UpdateEventSchema} from "@knot/backend/events";
@@ -8,6 +8,8 @@ import {EditOutlined} from "@ant-design/icons";
 import {Controller, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {AxiosInstance} from "@/lib/fetcher.tsx";
+import dayjs from "dayjs";
+import {z} from "zod";
 
 const { Text, Title } = Typography;
 
@@ -50,13 +52,19 @@ function EventInformation(props: { id: string }) {
     </div>
 }
 
+type UpdateEventInput = z.input<typeof UpdateEventSchema>;
+type UpdateEventOutput = z.output<typeof UpdateEventSchema>;
+
 function UpdateModal(props: { event: ClubEvent }) {
     const [ open, setOpen ] = useState(false);
     const [ api, contextHolder ] = notification.useNotification();
-    const { handleSubmit, formState: { errors }, control } = useForm<UpdateEventData>({
+
+    const { handleSubmit, formState: { errors }, control } = useForm<UpdateEventInput, any, UpdateEventOutput>({
         resolver: zodResolver(UpdateEventSchema),
         defaultValues: {
-            name: props.event.name
+            name: props.event.name,
+            start: props.event.start ? new Date(props.event.start).toISOString() : undefined,
+            end: props.event.end ? new Date(props.event.end).toISOString() : undefined,
         }
     });
 
@@ -107,6 +115,45 @@ function UpdateModal(props: { event: ClubEvent }) {
                         render={({ field }) => <Input {...field} placeholder="Name"/>}
                     />
                 </Form.Item>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Form.Item
+                        validateStatus={errors.start ? "error" : ""}
+                        help={errors.start?.message}
+                    >
+                        <Controller
+                            name="start"
+                            control={control}
+                            render={({ field }) => (
+                                <DatePicker
+                                    showTime
+                                    value={field.value ? dayjs(field.value) : null}
+                                    format={"DD/MM/YYYY h:mm A"}
+                                    onChange={(date) => field.onChange(date ? date.toISOString() : null)}
+                                />
+                            )}
+                        />
+                    </Form.Item>
+
+                    <Form.Item
+                        validateStatus={errors.end ? "error" : ""}
+                        help={errors.end?.message}
+                    >
+                        <Controller
+                            name="end"
+                            control={control}
+                            render={({ field }) => (
+                                <DatePicker
+                                    showTime
+                                    value={field.value ? dayjs(field.value) : null}
+                                    format={"DD/MM/YYYY h:mm A"}
+                                    onChange={(date) => field.onChange(date ? date.toISOString() : null)}
+                                />
+                            )}
+                        />
+                    </Form.Item>
+                </div>
+
             </form>
         </Modal>
         <Button

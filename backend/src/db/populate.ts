@@ -62,7 +62,9 @@ async function generateData() {
     console.log("-- Inserting Events");
     const event1: typeof eventsTable.$inferInsert = {
         name: "MAC Open Day",
-        clubId: insertedClub1!.id
+        clubId: insertedClub1!.id,
+        start: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+        end: new Date(Date.now() + 3.1 * 24 * 60 * 60 * 1000)
     }
     await db.insert(eventsTable).values(event1);
 
