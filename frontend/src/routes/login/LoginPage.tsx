@@ -1,4 +1,4 @@
-import { LoginForm } from "./LoginForm";
+import { LoginForm } from "../../components/LoginForm.tsx";
 import { theme, Typography } from "antd";
 
 const { Title } = Typography;

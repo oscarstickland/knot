@@ -2,8 +2,8 @@ import { LoginFormSchema, type CurrentUserData, type LoginFormData } from "@knot
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button, Form, Input, theme } from "antd";
-import { AxiosInstance } from "@/lib/fetcher";
-import { useUserMutate } from "@/lib/auth";
+import { AxiosInstance } from "@/lib/fetcher.tsx";
+import { useUserMutate } from "@/lib/auth.tsx";
 import axios from "axios";
 import { useNavigate } from "react-router";
 
@@ -22,12 +22,12 @@ export function LoginForm() {
 
     const onSubmit = (data: LoginFormData) => {
         AxiosInstance.post<CurrentUserData>("/auth/login", data)
-            .then((response) => {
+            .then(async (response) => {
                 if (response.status === 200) {
                     // If successful - then we need to redirect
                     // but first - update the cache with the new user
                     if (userMutator) {
-                        userMutator({ ...response.data });
+                        await userMutator({ ...response.data });
                     } else {
                         console.error("Mutator is null");
                     }

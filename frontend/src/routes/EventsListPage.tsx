@@ -2,6 +2,7 @@ import {Breadcrumb, Button, Layout, Result, Table, type TableProps, theme, Typog
 import {useUser} from "@/lib/auth.tsx";
 import useSWR from "swr";
 import type {ClubEvent} from "@knot/backend/events";
+import {Link} from "react-router";
 
 const { Text, Title } = Typography;
 
@@ -45,7 +46,7 @@ function EventsTable() {
             key: "name",
             title: "Event",
             dataIndex: "name",
-            render: (text) => <a>{text}</a>
+            render: (_, row) => <Link to={`/app/events/${row.key}`}>{row.name}</Link>
         }
     ]
 
