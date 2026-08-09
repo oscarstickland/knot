@@ -7,6 +7,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import {z} from "zod";
 import {EventModal} from "@/components/EventModal.tsx";
 import type {AxiosError} from "axios";
+import {useUser} from "@/lib/auth.tsx";
 
 const { Text, Title } = Typography;
 dayjs.extend(relativeTime);
@@ -32,6 +33,7 @@ export function EventPage() {
 
 function EventInformation(props: { id: string }) {
     const { token } = theme.useToken();
+    const user = useUser();
     const { data, error, isLoading } = useSWR<ClubEvent, AxiosError>(props.id ? `/events/${props.id}` : null);
 
     if (isLoading) return <Spin />
@@ -57,7 +59,7 @@ function EventInformation(props: { id: string }) {
             </Text>
         </div>
 
-        <EventModal event={data} mode={"update"} />
+        { user.role === "admin" || user.role === "exec" ? <EventModal event={data} mode={"update"} /> : "" }
     </div>
 }
 
