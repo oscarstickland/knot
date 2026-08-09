@@ -22,6 +22,20 @@ eventsApp.get("/", async (c) => {
     return c.json(events);
 });
 
+eventsApp.post("/", async (c) => {
+    const user = c.var.user;
+    const db = c.get('db');
+    const body = await c.req.json();
+
+    const parsed = UpdateEventSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+
+    const newEvent = await db
+        .insert(eventsTable)
+        .values({...parsed.data, clubId: user.club.id});
+    return c.json({ message: "Created" }, 201)
+})
+
 eventsApp.get("/:id{[0-9]+}", async (c) => {
     const eventId = Number(c.req.param("id"));
     const db = c.get('db');
@@ -33,7 +47,7 @@ eventsApp.get("/:id{[0-9]+}", async (c) => {
 
     if (!event) throw new HTTPException(404);
     return c.json(event);
-})
+});
 
 eventsApp.put("/:id{[0-9]+}", async (c) => {
     const eventId = Number(c.req.param("id"));
@@ -54,6 +68,6 @@ eventsApp.put("/:id{[0-9]+}", async (c) => {
     if (!updatedEvent) throw new HTTPException(404, { message: "Event not found or unauthorized" });
 
     return c.json(updatedEvent);
-})
+});
 
 export { eventsApp };

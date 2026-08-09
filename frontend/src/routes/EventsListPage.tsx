@@ -3,6 +3,7 @@ import {useUser} from "@/lib/auth.tsx";
 import useSWR from "swr";
 import type {ClubEvent} from "@knot/backend/events";
 import {Link} from "react-router";
+import {EventModal} from "@/components/EventModal.tsx";
 
 const { Text, Title } = Typography;
 
@@ -25,7 +26,7 @@ export function EventsListPage() {
                 paddingBottom: "24px"
             }}>
                 <Title level={2} style={{ margin: 0 }}>Events</Title>
-                { user.role === "admin" || user.role === "exec" ? <Button>Create</Button> : "" }
+                { user.role === "admin" || user.role === "exec" ? <EventModal mode={"create"} /> : "" }
             </div>
 
             <EventsTable />
