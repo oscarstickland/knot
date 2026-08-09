@@ -5,7 +5,11 @@ export const CurrentUserSchema = z.object({
     id: z.number(),
     name: z.string(),
     email: z.email(),
-    role: z.enum(userRoles)
+    role: z.enum(userRoles),
+    club: z.object({
+        id: z.number(),
+        name: z.string(),
+    })
 });
 
 export const JWTUserSchema = z.object({
@@ -18,6 +22,6 @@ export const LoginFormSchema = z.object({
     password: z.string().min(1, "Password of length 1 is required")
 })
 
+export type JWTUserData = z.infer<typeof JWTUserSchema>;
 export type LoginFormData = z.infer<typeof LoginFormSchema>
-
 export type CurrentUserData = z.infer<typeof CurrentUserSchema>;

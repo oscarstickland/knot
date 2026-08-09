@@ -16,3 +16,5 @@ export const attachDatabase = createMiddleware<DbEnv>(async (c, next) => {
     c.set("db", db);
     await next();
 })
+
+export const DBConnection = db;

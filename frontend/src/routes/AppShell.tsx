@@ -8,21 +8,14 @@ import {
     HomeOutlined,
     LogoutOutlined,
     SettingOutlined,
-    StepBackwardOutlined,
     UserOutlined
 } from "@ant-design/icons";
 
-const { Header, Content, Sider } = Layout;
+const { Sider } = Layout;
 const { Title, Text } = Typography;
-
-const items1: MenuProps['items'] = ['1', '2', '3'].map((key) => ({
-  key,
-  label: `nav ${key}`,
-}));
 
 function useMenuItems(): MenuProps['items'] {
     const user = useUser();
-
 
     const dashboard: MenuProps['items'] = [{
         key: "/app",
@@ -69,11 +62,12 @@ function useMenuItems(): MenuProps['items'] {
 
 export const AppShell: React.FC = () => {
     const { token } = theme.useToken();
+    const user = useUser();
     const menuItems = useMenuItems();
 
     return (
         <Layout style={{minHeight: "100vh"}}>
-            <Sider 
+            <Sider
                 width={250} 
                 style={{ 
                     background: token.colorBgContainer,
@@ -92,7 +86,7 @@ export const AppShell: React.FC = () => {
                         textAlign: "center"
                     }}>
                         <Title level={3} style={{ background: token.colorBgContainer, margin: 0 }}>
-                            Insert Club Name
+                            { user.club.name }
                         </Title>
                         <Text style={{ background: token.colorBgContainer, margin: 0, color: token.colorTextTertiary }}>
                             Powered by Knot

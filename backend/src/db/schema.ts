@@ -16,13 +16,29 @@ export const usersTable = pgTable("users", {
     password: varchar({ length: 500 }).notNull(),
     role: rolesEnum().default("standard").notNull(),
     clubId: integer("club_id").notNull(),
+});
+
+export const eventsTable = pgTable("events", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    name: varchar({ length: 255 }).notNull(),
+    clubId: integer("club_id").notNull(),
 })
 
-export const relations = defineRelations({ clubsTable, usersTable }, (r) => ({
+export const relations = defineRelations({ clubsTable, usersTable, eventsTable }, (r) => ({
     usersTable: {
         club: r.one.clubsTable({
             from: r.usersTable.clubId,
             to: r.clubsTable.id
         })
+    },
+    eventsTable: {
+        club: r.one.clubsTable({
+            from: r.eventsTable.clubId,
+            to: r.clubsTable.id
+        })
+    },
+    clubsTable: {
+        users: r.many.usersTable(),
+        events: r.many.eventsTable()
     }
 }));

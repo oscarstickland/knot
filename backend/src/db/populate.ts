@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import { clubsTable, relations, usersTable } from "./schema";
+import {clubsTable, eventsTable, relations, usersTable} from "./schema";
 import { sql } from "drizzle-orm";
 import { Pool } from "pg";
 import { hashPassword } from "../services/auth";
@@ -58,6 +58,13 @@ async function generateData() {
         clubId: insertedClub1!.id
     };
     await db.insert(usersTable).values(user3);
+
+    console.log("-- Inserting Events");
+    const event1: typeof eventsTable.$inferInsert = {
+        name: "MAC Open Day",
+        clubId: insertedClub1!.id
+    }
+    await db.insert(eventsTable).values(event1);
 
     await pool.end();
 }
