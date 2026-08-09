@@ -9,9 +9,11 @@ import {Controller, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {AxiosInstance} from "@/lib/fetcher.tsx";
 import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
 import {z} from "zod";
 
 const { Text, Title } = Typography;
+dayjs.extend(relativeTime);
 
 export function EventPage() {
     const { token } = theme.useToken();
@@ -32,7 +34,11 @@ export function EventPage() {
     </Layout>
 }
 
+type UpdateEventInput = z.input<typeof UpdateEventSchema>;
+type UpdateEventOutput = z.output<typeof UpdateEventSchema>;
+
 function EventInformation(props: { id: string }) {
+    const { token } = theme.useToken();
     const { data, error, isLoading } = useSWR<ClubEvent, AxiosError>(props.id ? `/events/${props.id}` : null);
 
     if (isLoading) return <Spin />
@@ -46,14 +52,21 @@ function EventInformation(props: { id: string }) {
         </div>
     }
 
+    const start = dayjs(data.start)
+    const end = dayjs(data.end)
+
     return <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <Title level={2} style={{ marginTop: '0' }}>{data.name}</Title>
+        <div>
+            <Title level={2} style={{ marginTop: '0' }}>{data.name}</Title>
+            <Text style={{ color: token.colorTextSecondary }}>
+                From <strong>{start.format("dddd D MMMM YYYY [at] h:mm A")}</strong> to
+                {" "}   <strong>{end.format("dddd D MMMM YYYY [at] h:mm A")}</strong>
+            </Text>
+        </div>
+
         <UpdateModal event={data} />
     </div>
 }
-
-type UpdateEventInput = z.input<typeof UpdateEventSchema>;
-type UpdateEventOutput = z.output<typeof UpdateEventSchema>;
 
 function UpdateModal(props: { event: ClubEvent }) {
     const [ open, setOpen ] = useState(false);
