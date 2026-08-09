@@ -10,13 +10,14 @@
     "tsx": "^4.23.1"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^7.0.2"
   },
   "exports": {
     "./auth": "./src/types/auth.ts"
   },
   "scripts": {
-    "dev": "bun --watch src/index.ts"
+    "dev": "bun --watch src/index.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.9.0",

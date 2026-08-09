@@ -1,9 +1,11 @@
 import { z } from 'zod';
+import {userRoles} from "../db/schema.ts";
 
 export const CurrentUserSchema = z.object({
     id: z.number(),
     name: z.string(),
-    email: z.email()
+    email: z.email(),
+    role: z.enum(userRoles)
 });
 
 export const JWTUserSchema = z.object({
