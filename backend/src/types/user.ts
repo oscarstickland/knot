@@ -17,3 +17,16 @@ export const CreateMemberSchema = UpdateMemberSchema.extend({
 });
 
 export type CreateMemberData = z.infer<typeof CreateMemberSchema>;
+
+export const BulkRoleUpdateSchema = z.object({
+    ids: z.array(z.number().int()).min(1, "Select at least one member"),
+    role: z.enum(["standard", "exec"])
+});
+
+export type BulkRoleUpdateData = z.infer<typeof BulkRoleUpdateSchema>;
+
+export const BulkDeleteSchema = z.object({
+    ids: z.array(z.number().int()).min(1, "Select at least one member")
+});
+
+export type BulkDeleteData = z.infer<typeof BulkDeleteSchema>;

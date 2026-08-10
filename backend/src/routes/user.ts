@@ -3,8 +3,8 @@ import { hashPassword, isAuthenticated, type UserEnv } from "../services/auth";
 import type { DbEnv } from "../db/connection";
 import { HTTPException } from "hono/http-exception";
 import { usersTable } from "../db/schema";
-import { and, eq, getTableColumns } from "drizzle-orm";
-import { CreateMemberSchema, UpdateMemberSchema } from "../types/user";
+import { and, eq, getTableColumns, inArray, ne } from "drizzle-orm";
+import { BulkDeleteSchema, BulkRoleUpdateSchema, CreateMemberSchema, UpdateMemberSchema } from "../types/user";
 
 const userApp = new Hono<UserEnv & DbEnv>();
 userApp.use("*", isAuthenticated);
@@ -56,6 +56,53 @@ userApp.post("/", async (c) => {
         .returning(columns);
 
     return c.json(newMember, 201);
+});
+
+userApp.patch("/bulk-role", async (c) => {
+    const admin = c.var.user;
+    if (admin.role !== "admin") throw new HTTPException(403);
+
+    const db = c.get("db");
+    const body = await c.req.json();
+
+    const parsed = BulkRoleUpdateSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+
+    const { password, ...columns } = getTableColumns(usersTable);
+    const updatedMembers = await db
+        .update(usersTable)
+        .set({ role: parsed.data.role })
+        .where(and(
+            inArray(usersTable.id, parsed.data.ids),
+            eq(usersTable.clubId, admin.club.id),
+            ne(usersTable.role, "admin")
+        ))
+        .returning(columns);
+
+    return c.json(updatedMembers);
+});
+
+userApp.post("/bulk-delete", async (c) => {
+    const admin = c.var.user;
+    if (admin.role !== "admin") throw new HTTPException(403);
+
+    const db = c.get("db");
+    const body = await c.req.json();
+
+    const parsed = BulkDeleteSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+
+    const { password, ...columns } = getTableColumns(usersTable);
+    const deletedMembers = await db
+        .delete(usersTable)
+        .where(and(
+            inArray(usersTable.id, parsed.data.ids),
+            eq(usersTable.clubId, admin.club.id),
+            ne(usersTable.role, "admin")
+        ))
+        .returning(columns);
+
+    return c.json(deletedMembers);
 });
 
 userApp.put("/:id{[0-9]+}", async (c) => {
