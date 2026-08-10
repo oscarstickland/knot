@@ -11,3 +11,9 @@ export const UpdateMemberSchema = z.object({
 });
 
 export type UpdateMemberData = z.infer<typeof UpdateMemberSchema>;
+
+export const CreateMemberSchema = UpdateMemberSchema.extend({
+    password: z.string().min(8, "Password must be at least 8 characters")
+});
+
+export type CreateMemberData = z.infer<typeof CreateMemberSchema>;

@@ -4,7 +4,7 @@ import type { DbEnv } from "../db/connection";
 import { HTTPException } from "hono/http-exception";
 import { usersTable } from "../db/schema";
 import { and, eq, getTableColumns } from "drizzle-orm";
-import { UpdateMemberSchema } from "../types/user";
+import { CreateMemberSchema, UpdateMemberSchema } from "../types/user";
 
 const userApp = new Hono<UserEnv & DbEnv>();
 userApp.use("*", isAuthenticated);
@@ -26,6 +26,36 @@ userApp.get("/", async (c) => {
         .where(eq(usersTable.clubId, user.club.id));
 
     return c.json(members);
+});
+
+userApp.post("/", async (c) => {
+    const admin = c.var.user;
+    if (admin.role !== "admin") throw new HTTPException(403);
+
+    const db = c.get("db");
+    const body = await c.req.json();
+
+    const parsed = CreateMemberSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+
+    const emailInUse = await db.query.usersTable.findFirst({
+        where: { email: parsed.data.email }
+    });
+    if (emailInUse) throw new HTTPException(400, { message: "Email is already in use" });
+
+    const { password, ...columns } = getTableColumns(usersTable);
+    const [newMember] = await db
+        .insert(usersTable)
+        .values({
+            name: parsed.data.name,
+            email: parsed.data.email,
+            role: parsed.data.role,
+            password: await hashPassword(parsed.data.password),
+            clubId: admin.club.id
+        })
+        .returning(columns);
+
+    return c.json(newMember, 201);
 });
 
 userApp.put("/:id{[0-9]+}", async (c) => {

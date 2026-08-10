@@ -4,6 +4,7 @@ import { TeamOutlined } from "@ant-design/icons";
 import useSWR from "swr";
 import type { ClubMember } from "@knot/backend/user";
 import { EditMemberModal } from "@/components/EditMemberModal.tsx";
+import { CreateMemberModal } from "@/components/CreateMemberModal.tsx";
 
 const { Text } = Typography;
 
@@ -22,9 +23,16 @@ export function ManageMembersModal() {
             width={800}
             centered
         >
-            <Text type="secondary" style={{ display: "block", marginTop: "-8px", marginBottom: "16px" }}>
-                Click a member to change their details
-            </Text>
+            <div style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                marginTop: "-8px",
+                marginBottom: "16px"
+            }}>
+                <Text type="secondary">Click a member to change their details</Text>
+                <CreateMemberModal />
+            </div>
             <MembersTable />
         </Modal>
         <Button icon={<TeamOutlined />} onClick={() => setOpen(true)}>Manage Members</Button>
