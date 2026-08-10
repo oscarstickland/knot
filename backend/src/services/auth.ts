@@ -1,8 +1,8 @@
 import { createMiddleware } from "hono/factory";
-import { JWTUserSchema, type CurrentUserSchema } from "../types/auth";
+import {JWTUserSchema, type CurrentUserSchema, type JWTUserData, type CurrentUserData} from "../types/auth";
 import type z from "zod";
 import * as argon2 from 'argon2';
-import type { DbEnv } from "../db/connection";
+import {DBConnection, type DbEnv} from "../db/connection";
 import { HTTPException } from "hono/http-exception";
 import { getCookie } from "hono/cookie";
 import { usersTable } from "../db/schema";
@@ -45,23 +45,44 @@ export const isAuthenticated = createMiddleware<UserEnv & DbEnv>(async (c, next)
     }
     const tokenData = result.data;
 
+    const currentUserData = await fetchCurrentUserData(tokenData);
+    c.set("user", currentUserData);
+
+    await next();
+});
+
+export async function fetchCurrentUserData(tokenData: JWTUserData): Promise<CurrentUserData> {
     // Find user from database
-    const [user] = await db
-        .select()
-        .from(usersTable)
-        .where(and(eq(usersTable.id, tokenData.id), eq(usersTable.email, tokenData.email)))
-        .limit(1);
+    const user = await DBConnection.query.usersTable.findFirst({
+        where: {
+            id: tokenData.id, email: tokenData.email
+        },
+        with: {
+            club: true
+        }
+    })
 
     if (!user) {
         console.error("Unable to find the user in the database");
         throw new HTTPException(401);
     }
 
-    // Set the user on the request so the route can access it
-    c.set("user", {id: user.id, name: user.name, email: user.email, role: user.role})
+    if (!user.club) {
+        console.error("Unable to find associated club in the database for user");
+        throw new HTTPException(401);
+    }
 
-    await next();
-});
+    return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        club: {
+            id: user.club.id,
+            name: user.club.name
+        }
+    }
+}
 
 export async function hashPassword(password: string): Promise<string> {
     return await argon2.hash(password);

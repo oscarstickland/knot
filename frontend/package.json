@@ -14,6 +14,7 @@
     "@knot/backend": "workspace:*",
     "antd": "^6.5.2",
     "axios": "^1.18.1",
+    "dayjs": "^1.11.21",
     "react": "^19",
     "react-dom": "^19",
     "react-hook-form": "^7.83.0",

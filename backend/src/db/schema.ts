@@ -1,5 +1,5 @@
 import { defineRelations } from "drizzle-orm";
-import {integer, pgEnum, pgTable, varchar} from "drizzle-orm/pg-core";
+import {integer, pgEnum, pgTable, timestamp, varchar} from "drizzle-orm/pg-core";
 
 export const userRoles = ["standard", "exec", "admin"] as const;
 export const rolesEnum = pgEnum("roles", userRoles);
@@ -16,13 +16,31 @@ export const usersTable = pgTable("users", {
     password: varchar({ length: 500 }).notNull(),
     role: rolesEnum().default("standard").notNull(),
     clubId: integer("club_id").notNull(),
-})
+});
 
-export const relations = defineRelations({ clubsTable, usersTable }, (r) => ({
+export const eventsTable = pgTable("events", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    name: varchar({ length: 255 }).notNull(),
+    start: timestamp("start_time", { mode: "date", withTimezone: true }).notNull(),
+    end: timestamp("end_time", { mode: "date", withTimezone: true }).notNull(),
+    clubId: integer("club_id").notNull(),
+});
+
+export const relations = defineRelations({ clubsTable, usersTable, eventsTable }, (r) => ({
     usersTable: {
         club: r.one.clubsTable({
             from: r.usersTable.clubId,
             to: r.clubsTable.id
         })
+    },
+    eventsTable: {
+        club: r.one.clubsTable({
+            from: r.eventsTable.clubId,
+            to: r.clubsTable.id
+        })
+    },
+    clubsTable: {
+        users: r.many.usersTable(),
+        events: r.many.eventsTable()
     }
 }));
