@@ -1,9 +1,10 @@
 import { Hono } from "hono";
-import { isAuthenticated, type UserEnv } from "../services/auth";
+import { hashPassword, isAuthenticated, type UserEnv } from "../services/auth";
 import type { DbEnv } from "../db/connection";
 import { HTTPException } from "hono/http-exception";
 import { usersTable } from "../db/schema";
-import { eq, getTableColumns } from "drizzle-orm";
+import { and, eq, getTableColumns } from "drizzle-orm";
+import { UpdateMemberSchema } from "../types/user";
 
 const userApp = new Hono<UserEnv & DbEnv>();
 userApp.use("*", isAuthenticated);
@@ -25,6 +26,43 @@ userApp.get("/", async (c) => {
         .where(eq(usersTable.clubId, user.club.id));
 
     return c.json(members);
+});
+
+userApp.put("/:id{[0-9]+}", async (c) => {
+    const admin = c.var.user;
+    if (admin.role !== "admin") throw new HTTPException(403);
+
+    const memberId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const body = await c.req.json();
+
+    const parsed = UpdateMemberSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+
+    const target = await db.query.usersTable.findFirst({
+        where: { id: memberId, clubId: admin.club.id }
+    });
+    if (!target) throw new HTTPException(404, { message: "Member not found" });
+    if (target.role === "admin") throw new HTTPException(400, { message: "Admin accounts cannot be edited here" });
+
+    const emailInUse = await db.query.usersTable.findFirst({
+        where: { email: parsed.data.email, id: { ne: memberId } }
+    });
+    if (emailInUse) throw new HTTPException(400, { message: "Email is already in use" });
+
+    const { password, ...columns } = getTableColumns(usersTable);
+    const [updatedMember] = await db
+        .update(usersTable)
+        .set({
+            name: parsed.data.name,
+            email: parsed.data.email,
+            role: parsed.data.role,
+            ...(parsed.data.password ? { password: await hashPassword(parsed.data.password) } : {})
+        })
+        .where(and(eq(usersTable.id, memberId), eq(usersTable.clubId, admin.club.id)))
+        .returning(columns);
+
+    return c.json(updatedMember);
 });
 
 export { userApp };
