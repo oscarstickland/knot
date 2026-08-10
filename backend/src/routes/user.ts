@@ -95,4 +95,24 @@ userApp.put("/:id{[0-9]+}", async (c) => {
     return c.json(updatedMember);
 });
 
+userApp.delete("/:id{[0-9]+}", async (c) => {
+    const admin = c.var.user;
+    if (admin.role !== "admin") throw new HTTPException(403);
+
+    const memberId = Number(c.req.param("id"));
+    const db = c.get("db");
+
+    const target = await db.query.usersTable.findFirst({
+        where: { id: memberId, clubId: admin.club.id }
+    });
+    if (!target) throw new HTTPException(404, { message: "Member not found" });
+    if (target.role === "admin") throw new HTTPException(400, { message: "Admin accounts cannot be deleted here" });
+
+    await db
+        .delete(usersTable)
+        .where(and(eq(usersTable.id, memberId), eq(usersTable.clubId, admin.club.id)));
+
+    return c.body(null, 204);
+});
+
 export { userApp };

@@ -1,4 +1,5 @@
-import { Form, Input, Modal, Select, notification } from "antd";
+import { Button, Form, Input, Modal, Popconfirm, Select, notification } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
@@ -56,6 +57,25 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
             });
     }
 
+    const deleteMember = () => {
+        AxiosInstance.delete(`/user/${member.id}`)
+            .then(async () => {
+                await mutate("/user");
+                onClose();
+                api['success']({
+                    title: "Success",
+                    description: "Member has been deleted."
+                });
+            })
+            .catch((error) => {
+                const message = error?.response?.data?.message ?? "Member could not be deleted.";
+                api['error']({
+                    title: "Error",
+                    description: message
+                });
+            });
+    }
+
     return <>
         {contextHolder}
         <Modal
@@ -64,6 +84,23 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
             onCancel={onClose}
             title="Edit Member"
             centered
+            footer={(_, { OkBtn, CancelBtn }) => (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Popconfirm
+                        title="Delete member"
+                        description={`Are you sure you want to delete ${member.name}?`}
+                        onConfirm={deleteMember}
+                        okText="Delete"
+                        okButtonProps={{ danger: true }}
+                    >
+                        <Button danger icon={<DeleteOutlined />}>Delete</Button>
+                    </Popconfirm>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                        <CancelBtn />
+                        <OkBtn />
+                    </div>
+                </div>
+            )}
         >
             <form onSubmit={handleSubmit(submit)}>
                 <Form.Item
