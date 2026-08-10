@@ -1,7 +1,7 @@
-import { Breadcrumb, Layout, theme, Typography } from "antd"
+import { Layout, theme, Typography } from "antd"
+import { ManageMembersModal } from "@/components/ManageMembersModal.tsx";
 
-const { Content } = Layout;
-const { Text } = Typography;
+const { Title } = Typography;
 
 export function AdminPage() {
     const { token } = theme.useToken();
@@ -14,7 +14,15 @@ export function AdminPage() {
                 borderRadius: token.borderRadiusLG
             }}
         >
-            <Text>Admin Page</Text>
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingBottom: "24px"
+            }}>
+                <Title level={2} style={{ margin: 0 }}>Admin Settings</Title>
+                <ManageMembersModal />
+            </div>
         </Layout>
     </Layout>
 }
