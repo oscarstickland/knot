@@ -14,7 +14,8 @@
   },
   "exports": {
     "./auth": "./src/types/auth.ts",
-    "./events": "./src/types/events.ts"
+    "./events": "./src/types/events.ts",
+    "./user": "./src/types/user.ts"
   },
   "scripts": {
     "dev": "bun --watch src/index.ts",

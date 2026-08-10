@@ -1,0 +1,52 @@
+import { useState } from "react";
+import { Button, Modal, Result, Table, Tag, type TableProps } from "antd";
+import { TeamOutlined } from "@ant-design/icons";
+import useSWR from "swr";
+import type { ClubMember } from "@knot/backend/user";
+
+const roleColor = (role: ClubMember["role"]) =>
+    role === "admin" ? "red" : role === "exec" ? "blue" : "default";
+
+export function ManageMembersModal() {
+    const [open, setOpen] = useState(false);
+
+    return <>
+        <Modal
+            open={open}
+            onCancel={() => setOpen(false)}
+            footer={null}
+            title="Manage Members"
+            width={800}
+            centered
+        >
+            <MembersTable />
+        </Modal>
+        <Button icon={<TeamOutlined />} onClick={() => setOpen(true)}>Manage Members</Button>
+    </>
+}
+
+function MembersTable() {
+    const { data, isLoading, error } = useSWR<ClubMember[]>("/user");
+
+    const columns: TableProps<ClubMember>['columns'] = [
+        { key: "name", title: "Name", dataIndex: "name" },
+        { key: "email", title: "Email", dataIndex: "email" },
+        {
+            key: "role",
+            title: "Account Type",
+            dataIndex: "role",
+            render: (role: ClubMember["role"]) => <Tag color={roleColor(role)}>{role.toUpperCase()}</Tag>
+        }
+    ];
+
+    if (error) {
+        return <Result status="error" title="Retrieval Error" subTitle="Unable to fetch club members." />
+    }
+
+    return <Table
+        rowKey="id"
+        columns={columns}
+        loading={isLoading}
+        dataSource={data ?? []}
+    />
+}
