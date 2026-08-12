@@ -1,5 +1,5 @@
 import { Layout, theme, Typography } from "antd"
-import { ManageMembersModal } from "@/components/ManageMembersModal.tsx";
+import { ManageMembers } from "@/components/ManageMembers.tsx";
 
 const { Title } = Typography;
 
@@ -14,15 +14,9 @@ export function AdminPage() {
                 borderRadius: token.borderRadiusLG
             }}
         >
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingBottom: "24px"
-            }}>
-                <Title level={2} style={{ margin: 0 }}>Admin Settings</Title>
-                <ManageMembersModal />
-            </div>
+            <Title level={2} style={{ margin: 0, marginBottom: "24px" }}>Admin Settings</Title>
+            <Title level={4} style={{ margin: 0, marginBottom: "16px" }}>Manage Members</Title>
+            <ManageMembers />
         </Layout>
     </Layout>
 }

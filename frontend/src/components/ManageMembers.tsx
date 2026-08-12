@@ -3,7 +3,6 @@ import {
     Button,
     Dropdown,
     Input,
-    Modal,
     Popconfirm,
     Result,
     Space,
@@ -13,7 +12,7 @@ import {
     notification,
     type TableProps
 } from "antd";
-import { DeleteOutlined, DownloadOutlined, DownOutlined, SearchOutlined, TeamOutlined } from "@ant-design/icons";
+import { DeleteOutlined, DownloadOutlined, DownOutlined, SearchOutlined } from "@ant-design/icons";
 import useSWR, { mutate } from "swr";
 import type { ClubMember } from "@knot/backend/user";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
@@ -45,31 +44,18 @@ function exportMembersToCsv(members: ClubMember[]) {
     URL.revokeObjectURL(url);
 }
 
-export function ManageMembersModal() {
-    const [open, setOpen] = useState(false);
-
+export function ManageMembers() {
     return <>
-        <Modal
-            open={open}
-            onCancel={() => setOpen(false)}
-            footer={null}
-            title="Manage Members"
-            width={900}
-            centered
-        >
-            <div style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                marginTop: "-8px",
-                marginBottom: "16px"
-            }}>
-                <Text type="secondary">Click a member to change their details</Text>
-                <CreateMemberModal />
-            </div>
-            <MembersTable />
-        </Modal>
-        <Button icon={<TeamOutlined />} onClick={() => setOpen(true)}>Manage Members</Button>
+        <div style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            marginBottom: "16px"
+        }}>
+            <Text type="secondary">Click a member to change their details</Text>
+            <CreateMemberModal />
+        </div>
+        <MembersTable />
     </>
 }
 
