@@ -68,6 +68,15 @@ async function generateData() {
     }
     await db.insert(eventsTable).values(event1);
 
+    const event2: typeof eventsTable.$inferInsert = {
+        name: "Welcome BBQ",
+        clubId: insertedClub1!.id,
+        start: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+        end: new Date(Date.now() - 9.9 * 24 * 60 * 60 * 1000),
+        archived: true
+    }
+    await db.insert(eventsTable).values(event2);
+
     await pool.end();
 }
 

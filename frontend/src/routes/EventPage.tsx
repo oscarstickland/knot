@@ -1,13 +1,15 @@
-import {Layout, Result, Spin, theme, Typography} from "antd";
+import {Button, Layout, Result, Space, Spin, Tag, theme, Typography, notification} from "antd";
 import {useParams} from "react-router";
-import useSWR from "swr";
+import useSWR, {mutate} from "swr";
 import {type ClubEvent, UpdateEventSchema} from "@knot/backend/events";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import {z} from "zod";
 import {EventModal} from "@/components/EventModal.tsx";
+import {AxiosInstance} from "@/lib/fetcher.tsx";
 import type {AxiosError} from "axios";
 import {useUser} from "@/lib/auth.tsx";
+import {InboxOutlined} from "@ant-design/icons";
 
 const { Text, Title } = Typography;
 dayjs.extend(relativeTime);
@@ -34,6 +36,7 @@ export function EventPage() {
 function EventInformation(props: { id: string }) {
     const { token } = theme.useToken();
     const user = useUser();
+    const [api, contextHolder] = notification.useNotification();
     const { data, error, isLoading } = useSWR<ClubEvent, AxiosError>(props.id ? `/events/${props.id}` : null);
 
     if (isLoading) return <Spin />
@@ -49,17 +52,49 @@ function EventInformation(props: { id: string }) {
 
     const start = dayjs(data.start)
     const end = dayjs(data.end)
+    const isEventManager = user.role === "admin" || user.role === "exec";
+
+    const toggleArchived = () => {
+        AxiosInstance.patch(`/events/${data.id}/archive`, { archived: !data.archived })
+            .then(async () => {
+                await mutate(`/events/${data.id}`);
+                await mutate((key) => typeof key === "string" && key.startsWith("/events?archived="));
+                api["success"]({
+                    title: "Success",
+                    description: `Event has been ${data.archived ? "unarchived" : "archived"}.`
+                });
+            })
+            .catch(() => {
+                api["error"]({
+                    title: "Error",
+                    description: `Event could not be ${data.archived ? "unarchived" : "archived"}.`
+                });
+            });
+    }
 
     return <div style={{ display: "flex", justifyContent: "space-between" }}>
+        {contextHolder}
         <div>
-            <Title level={2} style={{ marginTop: '0' }}>{data.name}</Title>
+            <Space align="center" style={{ marginBottom: 8 }}>
+                <Title level={2} style={{ margin: 0 }}>{data.name}</Title>
+                { data.archived ? <Tag>Archived</Tag> : "" }
+            </Space>
+            <br />
             <Text style={{ color: token.colorTextSecondary }}>
                 From <strong>{start.format("dddd D MMMM YYYY [at] h:mm A")}</strong> to
                 {" "}   <strong>{end.format("dddd D MMMM YYYY [at] h:mm A")}</strong>
             </Text>
         </div>
 
-        { user.role === "admin" || user.role === "exec" ? <EventModal event={data} mode={"update"} /> : "" }
+        { isEventManager
+            ? <Space>
+                <Button icon={<InboxOutlined />} onClick={toggleArchived}>
+                    {data.archived ? "Unarchive" : "Archive"}
+                </Button>
+                <EventModal event={data} mode={"update"} />
+            </Space>
+            : ""
+        }
     </div>
 }
 
