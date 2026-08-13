@@ -16,6 +16,10 @@ eventsApp.get("/", async (c) => {
     const db = c.get('db');
     const showArchived = c.req.query("archived") === "true";
 
+    if (showArchived && user.role !== "admin" && user.role !== "exec") {
+        throw new HTTPException(403);
+    }
+
     const events = await db.query.eventsTable.findMany({
         where: { clubId: user.club.id, archived: showArchived }
     });
