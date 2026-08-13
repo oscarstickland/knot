@@ -1,4 +1,4 @@
-import { drizzle } from "drizzle-orm/node-postgres";
+import {drizzle, type NodePgDatabase} from "drizzle-orm/node-postgres";
 import { relations } from "./schema";
 import { Pool } from "pg";
 import { createMiddleware } from "hono/factory";
@@ -8,7 +8,7 @@ const db = drizzle({ client: pool, relations: relations });
 
 export type DbEnv = {
     Variables: {
-        db: typeof db
+        db: NodePgDatabase<typeof relations>
     }
 }
 

@@ -23,6 +23,9 @@ Note - where possible, share these types with the frontend - you will need to ex
 
 Also - you generally can't use the zValidator hono function - as because of the env types that are used, this will break. So instead, just do it in the body of the function.
 
+## Testing (Bun Test)
+The program uses bun test to test the backend. There is more of a focus on writing integration tests - which is done with a full automated setup of the database. However, if unit tests can be written, then they should be.
+
 # Frontend
 Application uses React Router, and so it operates as an SPA.
 
