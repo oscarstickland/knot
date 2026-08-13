@@ -9,5 +9,10 @@ const ClubEventSchema = z.object({
 
 export const UpdateEventSchema = ClubEventSchema;
 
+export const ArchiveEventSchema = z.object({
+    archived: z.boolean()
+});
+
 export type UpdateEventData = z.infer<typeof UpdateEventSchema>;
+export type ArchiveEventData = z.infer<typeof ArchiveEventSchema>;
 export type ClubEvent = typeof eventsTable.$inferSelect;
