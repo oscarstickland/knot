@@ -1,5 +1,5 @@
 import { defineRelations } from "drizzle-orm";
-import {integer, pgEnum, pgTable, timestamp, varchar} from "drizzle-orm/pg-core";
+import {boolean, integer, pgEnum, pgTable, timestamp, varchar} from "drizzle-orm/pg-core";
 
 export const userRoles = ["standard", "exec", "admin"] as const;
 export type UserRole = (typeof userRoles)[number];
@@ -25,6 +25,7 @@ export const eventsTable = pgTable("events", {
     start: timestamp("start_time", { mode: "date", withTimezone: true }).notNull(),
     end: timestamp("end_time", { mode: "date", withTimezone: true }).notNull(),
     clubId: integer("club_id").notNull(),
+    archived: boolean("archived").default(false).notNull(),
 });
 
 export const relations = defineRelations({ clubsTable, usersTable, eventsTable }, (r) => ({
