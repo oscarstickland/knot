@@ -51,6 +51,8 @@ eventsApp.get("/:id{[0-9]+}", async (c) => {
     })
 
     if (!event) throw new HTTPException(404);
+    if (event.archived && user.role !== "admin" && user.role !== "exec") throw new HTTPException(404);
+
     return c.json(event);
 });
 
@@ -63,6 +65,15 @@ eventsApp.put("/:id{[0-9]+}", async (c) => {
     const parsed = UpdateEventSchema.safeParse(body);
 
     if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+
+    const existingEvent = await db.query.eventsTable.findFirst({
+        where: { id: eventId, clubId: user.club.id }
+    });
+
+    if (!existingEvent) throw new HTTPException(404, { message: "Event not found or unauthorized" });
+    if (existingEvent.archived && user.role !== "admin" && user.role !== "exec") {
+        throw new HTTPException(404, { message: "Event not found or unauthorized" });
+    }
 
     const [updatedEvent] = await db
         .update(eventsTable)
