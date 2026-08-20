@@ -5,6 +5,7 @@ import { authApp } from "./routes/auth";
 import { attachDatabase } from "./db/connection";
 import { serveStatic } from "hono/bun";
 import {eventsApp} from "./routes/events.ts";
+import {tasksApp} from "./routes/tasks.ts";
 import {HTTPException} from "hono/http-exception";
 
 const app = new Hono();
@@ -15,7 +16,7 @@ if (process.env.NODE_ENV !== "production") {
     app.use("*", cors({
         origin: "http://localhost:5173",
         credentials: true,
-        allowMethods: ["GET", "POST", "PUT", "DELETE"]
+        allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
     }));
 }
 
@@ -24,6 +25,7 @@ app.use("*", attachDatabase);
 app.route("/api/user", userApp);
 app.route("/api/auth", authApp);
 app.route("/api/events", eventsApp);
+app.route("/api/tasks", tasksApp);
 app.all("/api/*", (c) => { throw new HTTPException(404) });
 
 // Serve the frontend
