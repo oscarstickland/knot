@@ -15,6 +15,7 @@
   "exports": {
     "./auth": "./src/types/auth.ts",
     "./events": "./src/types/events.ts",
+    "./tasks": "./src/types/tasks.ts",
     "./user": "./src/types/user.ts"
   },
   "scripts": {

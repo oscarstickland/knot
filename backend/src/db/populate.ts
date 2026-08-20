@@ -1,7 +1,17 @@
 import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import {clubsTable, eventsTable, relations, usersTable} from "./schema";
+import {
+    clubsTable,
+    eventsTable,
+    relations,
+    taskAssignmentsTable,
+    taskAuditLogTable,
+    taskDependenciesTable,
+    taskDocumentsTable,
+    tasksTable,
+    usersTable
+} from "./schema";
 import { sql } from "drizzle-orm";
 import { Pool } from "pg";
 import { hashPassword } from "../services/auth";
@@ -39,7 +49,7 @@ async function generateData() {
         role: "admin",
         clubId: insertedClub1!.id
     };
-    await db.insert(usersTable).values(user1);
+    const [insertedUser1] = await db.insert(usersTable).values(user1).returning();
 
     const user2: typeof usersTable.$inferInsert = {
         name: "Wesley Tang",
@@ -48,7 +58,7 @@ async function generateData() {
         role: "exec",
         clubId: insertedClub1!.id
     };
-    await db.insert(usersTable).values(user2);
+    const [insertedUser2] = await db.insert(usersTable).values(user2).returning();
 
     const user3: typeof usersTable.$inferInsert = {
         name: "Flynn Tiong",
@@ -57,7 +67,7 @@ async function generateData() {
         role: "standard",
         clubId: insertedClub1!.id
     };
-    await db.insert(usersTable).values(user3);
+    const [insertedUser3] = await db.insert(usersTable).values(user3).returning();
 
     console.log("-- Inserting Events");
     const event1: typeof eventsTable.$inferInsert = {
@@ -66,7 +76,7 @@ async function generateData() {
         start: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
         end: new Date(Date.now() + 3.1 * 24 * 60 * 60 * 1000)
     }
-    await db.insert(eventsTable).values(event1);
+    const [insertedEvent1] = await db.insert(eventsTable).values(event1).returning();
 
     const event2: typeof eventsTable.$inferInsert = {
         name: "Welcome BBQ",
@@ -76,6 +86,57 @@ async function generateData() {
         archived: true
     }
     await db.insert(eventsTable).values(event2);
+
+    console.log("-- Inserting Tasks");
+    const task1: typeof tasksTable.$inferInsert = {
+        eventId: insertedEvent1!.id,
+        title: "Book venue",
+        description: "Confirm the hall booking and pay the deposit",
+        priority: "high",
+        progress: "in_progress",
+        dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+        createdBy: insertedUser1!.id
+    };
+    const [insertedTask1] = await db.insert(tasksTable).values(task1).returning();
+
+    const task2: typeof tasksTable.$inferInsert = {
+        eventId: insertedEvent1!.id,
+        title: "Send invitations",
+        description: "Email the open day invite to the mailing list",
+        priority: "medium",
+        progress: "backlog",
+        dueDate: null,
+        createdBy: insertedUser1!.id
+    };
+    const [insertedTask2] = await db.insert(tasksTable).values(task2).returning();
+
+    console.log("-- Inserting Task Assignments");
+    await db.insert(taskAssignmentsTable).values([
+        { taskId: insertedTask1!.id, userId: insertedUser2!.id },
+        { taskId: insertedTask2!.id, userId: insertedUser2!.id },
+        { taskId: insertedTask2!.id, userId: insertedUser3!.id }
+    ]);
+
+    console.log("-- Inserting Task Dependencies");
+    await db.insert(taskDependenciesTable).values({
+        taskId: insertedTask2!.id,
+        dependsOnTaskId: insertedTask1!.id
+    });
+
+    console.log("-- Inserting Task Documents");
+    await db.insert(taskDocumentsTable).values({
+        taskId: insertedTask1!.id,
+        url: "https://example.com/venue-contract.pdf",
+        addedBy: insertedUser1!.id
+    });
+
+    console.log("-- Inserting Task Audit Log");
+    await db.insert(taskAuditLogTable).values({
+        taskId: insertedTask1!.id,
+        changedBy: insertedUser1!.id,
+        action: "created",
+        changes: task1
+    });
 
     await pool.end();
 }
