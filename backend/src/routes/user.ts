@@ -15,7 +15,7 @@ userApp.get("/me", async (c) => {
 
 userApp.get("/", async (c) => {
     const user = c.var.user;
-    if (user.role !== "admin") throw new HTTPException(403);
+    if (user.role !== "admin" && user.role !== "exec") throw new HTTPException(403);
 
     const db = c.get("db");
     const { password, ...columns } = getTableColumns(usersTable);

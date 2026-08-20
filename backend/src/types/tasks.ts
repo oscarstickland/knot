@@ -1,6 +1,8 @@
-import type { tasksTable, taskAuditLogTable, taskDocumentsTable } from "../db/schema.ts";
+import type { tasksTable, taskAuditLogTable, taskDocumentsTable, taskAssignmentsTable, taskDependenciesTable } from "../db/schema.ts";
 import { taskPriorities, taskProgressStates } from "../db/schema.ts";
 import { z } from "zod";
+
+export { taskPriorities, taskProgressStates };
 
 const TaskSchema = z.object({
     eventId: z.number().int().positive(),
@@ -31,3 +33,15 @@ export type AddTaskDocumentData = z.infer<typeof AddTaskDocumentSchema>;
 export type Task = typeof tasksTable.$inferSelect;
 export type TaskDocument = typeof taskDocumentsTable.$inferSelect;
 export type TaskAuditLogEntry = typeof taskAuditLogTable.$inferSelect;
+export type TaskAssignment = typeof taskAssignmentsTable.$inferSelect;
+export type TaskDependency = typeof taskDependenciesTable.$inferSelect;
+
+export type TaskWithRelations = Task & {
+    assignments: TaskAssignment[];
+    dependsOn: TaskDependency[];
+    documents: TaskDocument[];
+};
+
+export type TaskDetail = TaskWithRelations & {
+    auditLog: TaskAuditLogEntry[];
+};

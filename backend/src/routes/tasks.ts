@@ -105,7 +105,7 @@ async function assertNoDependencyCycle(db: Db, eventId: number, taskId: number, 
     }
 }
 
-async function assertDependenciesCompleted(db: Db, taskId: number) {
+async function assertDependenciesCompleted(db: Db, taskId: number, taskTitle: string) {
     const dependencies = await db.query.taskDependenciesTable.findMany({
         where: { taskId },
         with: { dependsOnTask: true }
@@ -113,7 +113,10 @@ async function assertDependenciesCompleted(db: Db, taskId: number) {
 
     const incomplete = dependencies.filter((dependency) => dependency.dependsOnTask?.progress !== "completed");
     if (incomplete.length > 0) {
-        throw new HTTPException(400, { message: "All dependencies must be completed before this task can be completed" });
+        const incompleteTitles = incomplete.map((dependency) => dependency.dependsOnTask?.title ?? "an unknown task");
+        throw new HTTPException(400, {
+            message: `${taskTitle} cannot be completed as it requires ${incompleteTitles.join(", ")} to be completed`
+        });
     }
 }
 
@@ -283,7 +286,7 @@ tasksApp.patch("/:id{[0-9]+}/progress", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
 
     if (parsed.data.progress === "completed") {
-        await assertDependenciesCompleted(db, taskId);
+        await assertDependenciesCompleted(db, taskId, existingTask.title);
     }
 
     const updatedTask = await db.transaction(async (tx) => {

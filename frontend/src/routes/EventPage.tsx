@@ -6,6 +6,7 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import {z} from "zod";
 import {EventModal} from "@/components/EventModal.tsx";
+import {TasksSection} from "@/components/TasksSection.tsx";
 import {AxiosInstance} from "@/lib/fetcher.tsx";
 import type {AxiosError} from "axios";
 import {useUser} from "@/lib/auth.tsx";
@@ -72,29 +73,33 @@ function EventInformation(props: { id: string }) {
             });
     }
 
-    return <div style={{ display: "flex", justifyContent: "space-between" }}>
+    return <>
         {contextHolder}
-        <div>
-            <Space align="center" style={{ marginBottom: 8 }}>
-                <Title level={2} style={{ margin: 0 }}>{data.name}</Title>
-                { data.archived ? <Tag>Archived</Tag> : "" }
-            </Space>
-            <br />
-            <Text style={{ color: token.colorTextSecondary }}>
-                From <strong>{start.format("dddd D MMMM YYYY [at] h:mm A")}</strong> to
-                {" "}   <strong>{end.format("dddd D MMMM YYYY [at] h:mm A")}</strong>
-            </Text>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <div>
+                <Space align="center" style={{ marginBottom: 8 }}>
+                    <Title level={2} style={{ margin: 0 }}>{data.name}</Title>
+                    { data.archived ? <Tag>Archived</Tag> : "" }
+                </Space>
+                <br />
+                <Text style={{ color: token.colorTextSecondary }}>
+                    From <strong>{start.format("dddd D MMMM YYYY [at] h:mm A")}</strong> to
+                    {" "}   <strong>{end.format("dddd D MMMM YYYY [at] h:mm A")}</strong>
+                </Text>
+            </div>
+
+            { isEventManager
+                ? <Space>
+                    <Button icon={<InboxOutlined />} onClick={toggleArchived}>
+                        {data.archived ? "Unarchive" : "Archive"}
+                    </Button>
+                    <EventModal event={data} mode={"update"} />
+                </Space>
+                : ""
+            }
         </div>
 
-        { isEventManager
-            ? <Space>
-                <Button icon={<InboxOutlined />} onClick={toggleArchived}>
-                    {data.archived ? "Unarchive" : "Archive"}
-                </Button>
-                <EventModal event={data} mode={"update"} />
-            </Space>
-            : ""
-        }
-    </div>
+        <TasksSection eventId={data.id} />
+    </>
 }
 

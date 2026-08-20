@@ -26,7 +26,7 @@ app.route("/api/user", userApp);
 app.route("/api/auth", authApp);
 app.route("/api/events", eventsApp);
 app.route("/api/tasks", tasksApp);
-app.all("/api/*", (c) => { throw new HTTPException(404) });
+app.all("/api/*", () => { throw new HTTPException(404) });
 
 // Serve the frontend
 
