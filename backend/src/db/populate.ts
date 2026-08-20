@@ -110,6 +110,18 @@ async function generateData() {
     };
     const [insertedTask2] = await db.insert(tasksTable).values(task2).returning();
 
+    const task3: typeof tasksTable.$inferInsert = {
+        eventId: insertedEvent1!.id,
+        title: "Order branded lanyards",
+        description: "Dropped after the sponsor pulled out",
+        priority: "low",
+        progress: "backlog",
+        dueDate: null,
+        createdBy: insertedUser1!.id,
+        archived: true
+    };
+    await db.insert(tasksTable).values(task3);
+
     console.log("-- Inserting Task Assignments");
     await db.insert(taskAssignmentsTable).values([
         { taskId: insertedTask1!.id, userId: insertedUser2!.id },

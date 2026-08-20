@@ -4,6 +4,7 @@ import type { DbEnv } from "../db/connection.ts";
 import { HTTPException } from "hono/http-exception";
 import {
     AddTaskDocumentSchema,
+    ArchiveTaskSchema,
     CreateTaskSchema,
     UpdateTaskProgressSchema,
     UpdateTaskSchema
@@ -15,7 +16,7 @@ import {
     taskDocumentsTable,
     tasksTable
 } from "../db/schema.ts";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 type Db = DbEnv["Variables"]["db"];
 
@@ -68,6 +69,40 @@ async function assertDependenciesInEvent(db: Db, dependencyIds: number[], eventI
 
     if (dependencyTasks.length !== new Set(dependencyIds).size) {
         throw new HTTPException(400, { message: "One or more dependencies do not belong to this event" });
+    }
+}
+
+// Upholds the invariant that no active task ever depends on an archived one, from the
+// depending side: the dependencies a task is about to point at must all still be active.
+async function assertDependenciesActive(db: Db, dependencyIds: number[]) {
+    if (dependencyIds.length === 0) return;
+
+    const archivedDependencies = await db.query.tasksTable.findMany({
+        where: { id: { in: dependencyIds }, archived: true }
+    });
+
+    if (archivedDependencies.length > 0) {
+        const archivedTitles = archivedDependencies.map((dependency) => dependency.title);
+        throw new HTTPException(400, {
+            message: `${archivedTitles.join(", ")} cannot be depended on as ${archivedDependencies.length > 1 ? "they have" : "it has"} been archived`
+        });
+    }
+}
+
+// The same invariant from the depended-upon side: a task cannot be archived while any
+// active task still relies on it.
+async function assertNoActiveDependents(db: Db, taskId: number, taskTitle: string) {
+    const activeDependents = await db
+        .select({ title: tasksTable.title })
+        .from(taskDependenciesTable)
+        .innerJoin(tasksTable, eq(tasksTable.id, taskDependenciesTable.taskId))
+        .where(and(eq(taskDependenciesTable.dependsOnTaskId, taskId), eq(tasksTable.archived, false)));
+
+    if (activeDependents.length > 0) {
+        const dependentTitles = activeDependents.map((dependent) => dependent.title);
+        throw new HTTPException(400, {
+            message: `${taskTitle} cannot be archived as ${dependentTitles.join(", ")} ${activeDependents.length > 1 ? "depend" : "depends"} on it`
+        });
     }
 }
 
@@ -126,13 +161,16 @@ tasksApp.get("/", async (c) => {
     const eventId = Number(c.req.query("eventId"));
     if (!eventId) throw new HTTPException(400, { message: "eventId query parameter is required" });
 
+    const showArchived = c.req.query("archived") === "true";
+    if (showArchived && !isExecOrAdmin(user.role)) throw new HTTPException(403);
+
     const event = await db.query.eventsTable.findFirst({
         where: { id: eventId, clubId: user.club.id }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
     const tasks = await db.query.tasksTable.findMany({
-        where: { eventId },
+        where: { eventId, archived: showArchived },
         with: { assignments: true, dependsOn: true, documents: true }
     });
 
@@ -150,6 +188,7 @@ tasksApp.get("/:id{[0-9]+}", async (c) => {
     });
 
     if (!task || !task.event || task.event.clubId !== user.club.id) throw new HTTPException(404, { message: "Task not found" });
+    if (task.archived && !isExecOrAdmin(user.role)) throw new HTTPException(404, { message: "Task not found" });
 
     return c.json(task);
 });
@@ -170,6 +209,7 @@ tasksApp.post("/", async (c) => {
 
     await assertUsersInClub(db, parsed.data.assigneeIds, user.club.id);
     await assertDependenciesInEvent(db, parsed.data.dependencyIds, parsed.data.eventId, null);
+    await assertDependenciesActive(db, parsed.data.dependencyIds);
 
     const createdTask = await db.transaction(async (tx) => {
         const [task] = await tx
@@ -223,12 +263,14 @@ tasksApp.put("/:id{[0-9]+}", async (c) => {
 
     const existingTask = await loadClubTask(db, taskId, user.club.id);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
+    if (existingTask.archived) throw new HTTPException(400, { message: "This task is archived" });
     if (parsed.data.eventId !== existingTask.eventId) {
         throw new HTTPException(400, { message: "A task cannot be moved to a different event" });
     }
 
     await assertUsersInClub(db, parsed.data.assigneeIds, user.club.id);
     await assertDependenciesInEvent(db, parsed.data.dependencyIds, existingTask.eventId, taskId);
+    await assertDependenciesActive(db, parsed.data.dependencyIds);
     await assertNoDependencyCycle(db, existingTask.eventId, taskId, parsed.data.dependencyIds);
 
     const updatedTask = await db.transaction(async (tx) => {
@@ -277,6 +319,7 @@ tasksApp.patch("/:id{[0-9]+}/progress", async (c) => {
 
     const existingTask = await loadClubTask(db, taskId, user.club.id);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
+    if (existingTask.archived) throw new HTTPException(400, { message: "This task is archived" });
 
     const allowed = isExecOrAdmin(user.role) || await isAssignedToTask(db, taskId, user.id);
     if (!allowed) throw new HTTPException(403);
@@ -309,6 +352,46 @@ tasksApp.patch("/:id{[0-9]+}/progress", async (c) => {
     return c.json(updatedTask);
 });
 
+tasksApp.patch("/:id{[0-9]+}/archive", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
+
+    const taskId = Number(c.req.param("id"));
+    const existingTask = await loadClubTask(db, taskId, user.club.id);
+    if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
+
+    const body = await c.req.json();
+    const parsed = ArchiveTaskSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+
+    if (parsed.data.archived) {
+        await assertNoActiveDependents(db, taskId, existingTask.title);
+    } else {
+        const dependencies = await db.query.taskDependenciesTable.findMany({ where: { taskId } });
+        await assertDependenciesActive(db, dependencies.map((dependency) => dependency.dependsOnTaskId));
+    }
+
+    const updatedTask = await db.transaction(async (tx) => {
+        const [task] = await tx
+            .update(tasksTable)
+            .set({ archived: parsed.data.archived })
+            .where(eq(tasksTable.id, taskId))
+            .returning();
+
+        await tx.insert(taskAuditLogTable).values({
+            taskId,
+            changedBy: user.id,
+            action: "updated",
+            changes: { archived: parsed.data.archived }
+        });
+
+        return task;
+    });
+
+    return c.json(updatedTask);
+});
+
 tasksApp.post("/:id{[0-9]+}/documents", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
@@ -316,6 +399,7 @@ tasksApp.post("/:id{[0-9]+}/documents", async (c) => {
 
     const existingTask = await loadClubTask(db, taskId, user.club.id);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
+    if (existingTask.archived) throw new HTTPException(400, { message: "This task is archived" });
 
     const allowed = isExecOrAdmin(user.role) || await isAssignedToTask(db, taskId, user.id);
     if (!allowed) throw new HTTPException(403);

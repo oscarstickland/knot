@@ -46,6 +46,7 @@ export const tasksTable = pgTable("tasks", {
     dueDate: timestamp("due_date", { mode: "date", withTimezone: true }),
     createdBy: integer("created_by").notNull(),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+    archived: boolean("archived").default(false).notNull(),
 });
 
 export const taskAssignmentsTable = pgTable("task_assignments", {

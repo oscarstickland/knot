@@ -10,6 +10,7 @@ import { Button, DatePicker, Form, Input, Modal, Select, notification } from "an
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
+import { taskListKey } from "@/lib/tasks.ts";
 import useSWR, { mutate } from "swr";
 import dayjs from "dayjs";
 import { EditOutlined, PlusOutlined } from "@ant-design/icons";
@@ -35,7 +36,7 @@ export function TaskModal({ mode, eventId, task, trigger }: TaskModalProps) {
     const isEditMode = mode === "update";
 
     const { data: members } = useSWR<ClubMember[]>("/user");
-    const { data: eventTasks } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${eventId}`);
+    const { data: eventTasks } = useSWR<TaskWithRelations[]>(taskListKey(eventId));
     const dependencyOptions = (eventTasks ?? [])
         .filter((candidate) => candidate.id !== task?.id)
         .map((candidate) => ({ label: candidate.title, value: candidate.id }));
@@ -76,7 +77,7 @@ export function TaskModal({ mode, eventId, task, trigger }: TaskModalProps) {
                 if (isEditMode) {
                     await mutate(`/tasks/${task.id}`);
                 }
-                await mutate(`/tasks?eventId=${eventId}`);
+                await mutate(taskListKey(eventId));
                 setOpen(false);
 
                 if (!isEditMode) reset();
