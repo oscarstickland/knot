@@ -87,11 +87,10 @@ export function TaskModal({ mode, eventId, task, trigger }: TaskModalProps) {
                 });
             }
         })
-        .catch(() => {
-            api['error']({
-                title: "Error",
-                description: `Task could not be ${isEditMode ? "updated" : "created"}.`
-            });
+        .catch((err) => {
+            const message = err?.response?.data?.message
+                ?? `Task could not be ${isEditMode ? "updated" : "created"}.`;
+            api['error']({ title: "Error", description: message });
         })
     }
 

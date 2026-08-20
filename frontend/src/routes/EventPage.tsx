@@ -65,11 +65,10 @@ function EventInformation(props: { id: string }) {
                     description: `Event has been ${data.archived ? "unarchived" : "archived"}.`
                 });
             })
-            .catch(() => {
-                api["error"]({
-                    title: "Error",
-                    description: `Event could not be ${data.archived ? "unarchived" : "archived"}.`
-                });
+            .catch((err) => {
+                const message = err?.response?.data?.message
+                    ?? `Event could not be ${data.archived ? "unarchived" : "archived"}.`;
+                api["error"]({ title: "Error", description: message });
             });
     }
 

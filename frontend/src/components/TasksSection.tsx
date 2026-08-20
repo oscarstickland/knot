@@ -246,8 +246,9 @@ function AddDocumentForm(props: { taskId: number; eventId: number }) {
                 await mutate(`/tasks?eventId=${props.eventId}`);
                 reset();
             })
-            .catch(() => {
-                api["error"]({ title: "Error", description: "Link could not be added." });
+            .catch((err) => {
+                const message = err?.response?.data?.message ?? "Link could not be added.";
+                api["error"]({ title: "Error", description: message });
             });
     }
 
