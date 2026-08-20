@@ -58,11 +58,10 @@ export function EventModal({ mode, event }: EventFormModalProps) {
                 });
             }
         })
-        .catch((_) => {
-            api['error']({
-                title: "Error",
-                description: `Event could not be ${isEditMode ? "updated" : "created"}.`
-            });
+        .catch((err) => {
+            const message = err?.response?.data?.message
+                ?? `Event could not be ${isEditMode ? "updated" : "created"}.`;
+            api['error']({ title: "Error", description: message });
         })
     }
 
