@@ -1,0 +1,23 @@
+name: Backend Tests
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: self-hosted
+    container:
+      image: oven/bun:1
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+
+    env:
+      JWT_SECRET: abc123
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        uses: bun install
+

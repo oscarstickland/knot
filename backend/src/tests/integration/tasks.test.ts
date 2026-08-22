@@ -1,6 +1,11 @@
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect } from "bun:test";
 import { type TestDatabaseHarness, setupHarness } from "../harness.ts";
 import { eventsTable, tasksTable, taskAssignmentsTable, taskDependenciesTable } from "../../db/schema.ts";
+import type { Task } from "../../types/tasks.ts";
+
+type HTTPError = {
+    message: string
+}
 
 describe("Task Integration Test", () => {
     let harness: TestDatabaseHarness;
@@ -142,7 +147,7 @@ describe("Task Integration Test", () => {
                 })
             });
             expect(res.status).toBe(201);
-            const body = await res.json();
+            const body = await res.json() as Task;
 
             const assignments = await harness.db.query.taskAssignmentsTable.findMany({ where: { taskId: body.id } });
             const dependencies = await harness.db.query.taskDependenciesTable.findMany({ where: { taskId: body.id } });
@@ -274,7 +279,7 @@ describe("Task Integration Test", () => {
                 body: JSON.stringify({ progress: "completed" })
             });
             expect(res.status).toBe(400);
-            const body = await res.json();
+            const body = await res.json() as HTTPError;
             expect(body.message).toContain("Prerequisite Task");
 
             const unchanged = await harness.db.query.tasksTable.findFirst({ where: { id: task.id } });
@@ -320,7 +325,7 @@ describe("Task Integration Test", () => {
                 body: JSON.stringify({ progress: "completed" })
             });
             expect(res.status).toBe(400);
-            const body = await res.json();
+            const body = await res.json() as HTTPError;
             expect(body.message).toContain("Dependency Two");
             expect(body.message).not.toContain("Dependency One");
         });

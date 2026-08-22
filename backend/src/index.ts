@@ -5,7 +5,6 @@ import { authApp } from "./routes/auth";
 import {attachDatabase, type DbEnv} from "./db/connection";
 import { serveStatic } from "hono/bun";
 import {eventsApp} from "./routes/events.ts";
-import {tasksApp} from "./routes/tasks.ts";
 import {HTTPException} from "hono/http-exception";
 import { tasksApp } from "./routes/tasks.ts";
 
