@@ -19,5 +19,4 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install dependencies
-        uses: bun install
-
+        run: bun install
