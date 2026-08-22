@@ -6,6 +6,7 @@ import {attachDatabase, type DbEnv} from "./db/connection";
 import { serveStatic } from "hono/bun";
 import {eventsApp} from "./routes/events.ts";
 import {HTTPException} from "hono/http-exception";
+import { tasksApp } from "./routes/tasks.ts";
 
 export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabase) {
     const app = new Hono();
@@ -25,6 +26,7 @@ export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabas
     app.route("/api/user", userApp);
     app.route("/api/auth", authApp);
     app.route("/api/events", eventsApp);
+    app.route("/api/tasks", tasksApp);
     app.all("/api/*", (c) => { throw new HTTPException(404) });
 
     // Serve the frontend

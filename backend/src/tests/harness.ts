@@ -31,9 +31,13 @@ export interface TestDatabaseHarness {
  * Will then apply the migrations to the table so that it contains the up-to-date schema.
  */
 export async function setupHarness(): Promise<TestDatabaseHarness> {
+    console.log("[Debug] [Harness] Starting Harness Setup");
+
     const container = await new PostgreSqlContainer("postgres:16-alpine")
         .withStartupTimeout(120000)
         .start();
+
+    console.log("[Debug] [Harness] Starting Migrations");
 
     const pool = new Pool({ connectionString: container.getConnectionUri() });
     const client = await pool.connect();

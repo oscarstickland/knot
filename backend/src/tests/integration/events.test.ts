@@ -1,6 +1,6 @@
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect } from "bun:test";
 import { type TestDatabaseHarness, setupHarness } from "../harness.ts";
-import { sql } from "drizzle-orm";
+import { eventsTable } from "../../db/schema.ts";
 
 describe("Database Integration Test", () => {
     let harness: TestDatabaseHarness;
@@ -21,26 +21,6 @@ describe("Database Integration Test", () => {
         await harness.rollbackTransaction();
     });
 
-    it("creates an event", async () => {
-        const app = await harness.setupApp();
-        const club = await harness.setupClub("Club");
-        const { cookie } = await harness.setupUser("test@test.com", "admin", club.id, "User");
-
-        const res = await app.request("/api/events", {
-            method: "POST",
-            headers: { cookie },
-            body: JSON.stringify({
-                name: "Hello",
-                start: new Date(),
-                end: new Date(),
-            })
-        });
-
-        expect(res.status).toBe(201);
-
-        // TODO - check that it was actually inserted
-    });
-
     it("prevents standard users from creating events", async () => {
         const app = await harness.setupApp();
         const club = await harness.setupClub("Club");
@@ -52,9 +32,135 @@ describe("Database Integration Test", () => {
             body: JSON.stringify({
                 name: "Hello",
                 start: new Date(),
-                end: new Date(),
+                end: new Date(Date.now() + 5000),
+            })
+        });
+        expect(res.status).toBe(403);
+    });
+
+    it.each(["admin", "exec"])("allows %s to create an event", async (role) => {
+        const app = await harness.setupApp();
+        const club = await harness.setupClub("Club");
+        const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+
+        const res = await app.request("/api/events", {
+            method: "POST",
+            headers: { cookie },
+            body: JSON.stringify({
+                name: "Hello",
+                start: new Date(),
+                end: new Date(Date.now() + 5000),
+            })
+        });
+        expect(res.status).toBe(201); // verify endpoint
+
+        // then - verify that there is an event with the name hello
+        const event = await harness.db.query.eventsTable.findFirst({
+            where: { name: "Hello", clubId: club.id }
+        });
+        expect(event).not.toBeUndefined();
+    });
+
+    it.each(["admin", "exec"])("allows %s to edit an event", async (role) => {
+        const app = await harness.setupApp();
+        const club = await harness.setupClub("Club");
+        const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+
+        const referenceDate = new Date();
+
+        // insert an event
+        const event = await harness.db
+            .insert(eventsTable)
+            .values({ name: "Event", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id })
+            .returning();
+
+        // now - update all fields of the event
+        const res = await app.request(`/api/events/${event[0]!.id}`, {
+            method: "PUT",
+            headers: { cookie },
+            body: JSON.stringify({
+                name: "Event1",
+                start: new Date(referenceDate.valueOf() + 6000),
+                end: new Date(referenceDate.valueOf() + 7000),
+            })
+        });
+        expect(res.status).toBe(200);
+
+        // check that the update was successful
+        const updatedEvent = await harness.db.query.eventsTable.findFirst({
+            where: { id: event[0]!.id }
+        });
+        expect(updatedEvent).not.toBeUndefined();
+        expect(updatedEvent!.name).toEqual("Event1");
+        expect(updatedEvent!.start).toEqual(new Date(referenceDate.valueOf() + 6000));
+        expect(updatedEvent!.end).toEqual(new Date(referenceDate.valueOf() + 7000));
+    });
+
+    it("prevents standard users from updating events", async () => {
+        const app = await harness.setupApp();
+        const club = await harness.setupClub("Club");
+        const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+
+        // insert an event
+        const event = await harness.db
+            .insert(eventsTable)
+            .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id })
+            .returning();
+
+        // now - update all fields of the event
+        const res = await app.request(`/api/events/${event[0]!.id}`, {
+            method: "PUT",
+            headers: { cookie },
+            body: JSON.stringify({
+                name: "Event1",
+                start: new Date(Date.now() + 1000),
+                end: new Date(Date.now() + 6000),
             })
         });
         expect(res.status).toBe(404);
-    })
+    });
+
+    it("prevents users from creating event with end before start", async () => {
+        const app = await harness.setupApp();
+        const club = await harness.setupClub("Club");
+        const { cookie } = await harness.setupUser("test@test.com", "admin", club.id, "User");
+
+        const referenceDate = new Date();
+
+        const res = await app.request("/api/events", {
+            method: "POST",
+            headers: { cookie },
+            body: JSON.stringify({
+                name: "Hello",
+                start: referenceDate,
+                end: new Date(referenceDate.getTime() - 1),
+            })
+        });
+        expect(res.status).toBe(400); // verify endpoint
+    });
+
+    it("prevents users from updating event with end before start", async () => {
+        const app = await harness.setupApp();
+        const club = await harness.setupClub("Club");
+        const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+        const referenceDate = new Date();
+
+        // insert an event
+        const event = await harness.db
+            .insert(eventsTable)
+            .values({ name: "Event", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id })
+            .returning();
+
+        // now - attempt to put end date before start date
+        const res = await app.request(`/api/events/${event[0]!.id}`, {
+            method: "PUT",
+            headers: { cookie },
+            body: JSON.stringify({
+                name: "Event1",
+                start: new Date(referenceDate.valueOf() + 5000),
+                end: referenceDate,
+            })
+        });
+        expect(res.status).toBe(400);
+    });
 });

@@ -32,6 +32,10 @@ eventsApp.post("/", async (c) => {
     const db = c.get('db');
     const body = await c.req.json();
 
+    if (user.role != "admin" && user.role != "exec") {
+        throw new HTTPException(403);
+    }
+
     const parsed = UpdateEventSchema.safeParse(body);
     if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
 
@@ -71,7 +75,7 @@ eventsApp.put("/:id{[0-9]+}", async (c) => {
     });
 
     if (!existingEvent) throw new HTTPException(404, { message: "Event not found or unauthorized" });
-    if (existingEvent.archived && user.role !== "admin" && user.role !== "exec") {
+    if (existingEvent.archived || ( user.role !== "admin" && user.role !== "exec")) {
         throw new HTTPException(404, { message: "Event not found or unauthorized" });
     }
 
