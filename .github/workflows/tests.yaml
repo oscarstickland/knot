@@ -21,9 +21,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Pull Postgres container
-        run: docker pull postgres:16-alpine
-
       - name: Run tests
         run: bun test
         working-directory: ./backend
