@@ -33,6 +33,14 @@ export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabas
     app.use("/*", serveStatic({ root: "./dist" }));
     app.get("*", serveStatic({ path: "./dist/index.html" }));
 
+    app.onError((err, context) => {
+        if (err instanceof HTTPException) {
+            return context.json({ message: err.message || undefined }, err.status);
+        }
+
+        return context.json({ message: undefined }, 500);
+    })
+
     return app;
 }
 

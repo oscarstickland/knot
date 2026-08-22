@@ -163,4 +163,26 @@ describe("Database Integration Test", () => {
         });
         expect(res.status).toBe(400);
     });
+
+    it("prevent users from one club accessing another clubs event", async () => {
+        const app = await harness.setupApp();
+        const club1 = await harness.setupClub("Club1");
+        const club2 = await harness.setupClub("Club2");
+        const user1 = await harness.setupUser("test1@test.com", "admin", club1.id, "User");
+        const user2 = await harness.setupUser("test2@test.com", "admin", club1.id, "User");
+
+        const referenceDate = new Date();
+        // create event with user 1
+        const event = await harness.db
+            .insert(eventsTable)
+            .values({ name: "Event", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club1.id })
+            .returning();
+
+        // now - attempt to access it from user 2
+        const res = await app.request(`/api/events/${event[0]!.id}`, {
+            method: "GET",
+            headers: { cookie: user2.cookie },
+        });
+        expect(res.status).toBe(200);
+    });
 });

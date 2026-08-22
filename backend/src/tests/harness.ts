@@ -55,10 +55,17 @@ export async function setupHarness(): Promise<TestDatabaseHarness> {
             await container.stop();
         },
         startTransaction: async () => {
-            await db.execute(sql`BEGIN;`);
+
         },
         rollbackTransaction: async () => {
-            await db.execute(sql`ROLLBACK;`);
+            // Clear existing tables - reset them back to empty
+            const { rows } = await db.execute<{ tablename: string }>(
+                sql`select tablename from pg_tables where schemaname = 'public'`
+            );
+            if (rows.length === 0) return;
+
+            const tableList = rows.map((row) => `"${row.tablename}"`).join(", ");
+            await db.execute(sql.raw(`truncate table ${tableList} restart identity cascade;`));
         },
         setupApp: () => setupApp(db),
         setupClub: (name: string) => setupClub(db, name),
