@@ -22,8 +22,6 @@ describe("Database Integration Test", () => {
     });
 
     it("prevents standard users from creating events", async () => {
-        expect(true).toBe(false);
-
         const app = await harness.setupApp();
         const club = await harness.setupClub("Club");
         const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
