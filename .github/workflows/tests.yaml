@@ -7,7 +7,7 @@ jobs:
   backend-tests:
     runs-on: self-hosted
     container:
-      image: oven/bun:1
+      image: oven/bun:1.3
       volumes:
         - /var/run/docker.sock:/var/run/docker.sock
 
