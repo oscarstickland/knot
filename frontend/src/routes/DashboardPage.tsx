@@ -1,4 +1,4 @@
-import { Card, Layout, theme, Typography } from "antd"
+import { Avatar, Card, Layout, Table, type TableProps, theme, Tooltip, Typography } from "antd"
 import { EventModal } from "@/components/EventModal.tsx";
 import { useUser } from "@/lib/auth.tsx";
 import dayjs from "dayjs";
@@ -7,6 +7,8 @@ import useSWR from "swr";
 import type { ClubEvent } from "@knot/backend/events";
 import { Link } from "react-router";
 import { Listy } from 'antd';
+import type { TaskWithRelations } from "@knot/backend/tasks";
+import { TaskStatusPill } from "@/components/TaskStatusPill.tsx";
 
 const { Text, Title } = Typography;
 dayjs.extend(advancedFormat);
@@ -49,6 +51,7 @@ export function DashboardPage() {
             <div style={{
                 display: "grid",
                 gridTemplateColumns: "2fr 1fr",
+                gap: "2em"
             }}>
                 <UpcomingTasks />
                 <UpcomingEvents />
@@ -58,16 +61,88 @@ export function DashboardPage() {
 }
 
 function UpcomingTasks() {
-    return <div>"upcoming tasks"</div>
+    const tasks = useSWR<TaskWithRelations[]>("/tasks/me");
+
+    const dataVisible = tasks.data && tasks.data.length > 0;
+
+    const EmptyTasks = () => {
+        return <div style={{ display: 'flex', alignItems: "center", justifyContent: "center", height: "100%" }}>
+            <p>No Upcoming Tasks</p>
+        </div>
+    }
+
+    return <Card
+        title="Upcoming Tasks"
+        loading={tasks.isLoading}
+        styles={{ body: { padding: dataVisible ? "0" : undefined } }}
+    >
+        { tasks.data && tasks.data.length === 0 ? <EmptyTasks /> : null }
+        { tasks.data && tasks.data.length > 0 ? <UpcomingTaskList tasks={tasks.data} /> : null }
+    </Card>
+}
+
+function UpcomingTaskList(props: { tasks: TaskWithRelations[] }) {
+    return <Table
+        rowKey="id"
+        dataSource={props.tasks ?? []}
+        pagination={false}
+        columns={[
+            {
+                key: "title",
+                title: "Task",
+                dataIndex: "title",
+            },
+            {
+                key: "event",
+                title: "Event",
+                render: (_, record) => {
+                    return <span>{record.event.name}</span>;
+                }
+            },
+            {
+                key: "status",
+                title: "Status",
+                render: (_, record) => {
+                    return <TaskStatusPill task={record} />
+                }
+            },
+            {
+                key: "due",
+                title: "Due Date",
+                render: (_, record) => {
+                    if (record.dueDate === null) return <p>None</p>;
+
+                    const dueDate = dayjs(record.dueDate);
+                    return <p>{dueDate.format("D MMM")}</p>
+                }
+            }
+        ] as TableProps<TaskWithRelations>['columns']}
+    />
 }
 
 function UpcomingEvents() {
     const events = useSWR<ClubEvent[]>(`/events?archived=false`);
-    const { token } = theme.useToken();
+    const dataVisible = events.data && events.data.length > 0;
 
-    if (events.isLoading || events.error) {
-        return <p>Error</p>
+    const EmptyEvents = () => {
+        return <div style={{ display: 'flex', alignItems: "center", justifyContent: "center", height: "100%" }}>
+            <p>No Active Events</p>
+        </div>
     }
+
+    return <Card
+        title="Upcoming Events"
+        loading={events.isLoading}
+        extra={<Link to={"/app/events"}>All events</Link>}
+        styles={{ body: { padding: dataVisible ? "0" : undefined } }}
+    >
+        {events.data && events.data.length === 0 ? <EmptyEvents /> : null}
+        {events.data && events.data.length > 0 ? <UpcomingEventsList events={events.data} /> : null}
+    </Card>
+}
+
+function UpcomingEventsList(props: { events: ClubEvent[] }) {
+    const { token } = theme.useToken();
 
     const clubEventRenderer = (event: ClubEvent) => {
         const start = dayjs(event.start);
@@ -106,13 +181,11 @@ function UpcomingEvents() {
                 }}>
                     <p style={{ margin: 0, fontSize: token.fontSizeHeading4, fontWeight: token.fontWeightStrong }}>{event.name}</p>
                     <p style={{ margin: 0, color: token.colorTextSecondary }}>Location · { start.format("H:mm A") }</p>
-                    <p style={{ margin: 0, color: token.colorTextTertiary }}>0/0 Tasks</p>
+                    <p style={{ margin: 0, color: token.colorTextTertiary }}>?/? Tasks</p>
                 </div>
             </div>
         </Link>;
     }
 
-    return <Card title="Upcoming Events" extra={<Link to={"/app/events"}>All events</Link>} styles={{ body: { padding: "0" } }}>
-        <Listy<ClubEvent> items={events.data} rowKey="id" itemRender={clubEventRenderer} style={{ margin: 0 }} styles={{  }} />
-    </Card>
+    return <Listy<ClubEvent> items={props.events} rowKey="id" itemRender={clubEventRenderer} style={{ margin: 0 }} styles={{  }} />;
 }

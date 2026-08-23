@@ -139,6 +139,22 @@ tasksApp.get("/", async (c) => {
     return c.json(tasks);
 });
 
+
+tasksApp.get("/me", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+
+    const tasks = await db.query.tasksTable.findMany({
+        where: {
+            assignments: { userId: user.id },
+            event: { clubId: user.club.id }
+        },
+        with: { event: true, assignments: true, dependsOn: true, documents: true }
+    });
+
+    return c.json(tasks);
+})
+
 tasksApp.get("/:id{[0-9]+}", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
