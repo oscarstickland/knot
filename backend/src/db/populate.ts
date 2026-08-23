@@ -79,13 +79,21 @@ async function generateData() {
     const [insertedEvent1] = await db.insert(eventsTable).values(event1).returning();
 
     const event2: typeof eventsTable.$inferInsert = {
+        name: "MACathon",
+        clubId: insertedClub1!.id,
+        start: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+        end: new Date(Date.now() + 5.1 * 24 * 60 * 60 * 1000)
+    }
+    const [insertedEvent2] = await db.insert(eventsTable).values(event2).returning();
+
+    const event3: typeof eventsTable.$inferInsert = {
         name: "Welcome BBQ",
         clubId: insertedClub1!.id,
         start: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
         end: new Date(Date.now() - 9.9 * 24 * 60 * 60 * 1000),
         archived: true
     }
-    await db.insert(eventsTable).values(event2);
+    await db.insert(eventsTable).values(event3);
 
     console.log("-- Inserting Tasks");
     const task1: typeof tasksTable.$inferInsert = {
