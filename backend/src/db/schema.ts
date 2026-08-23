@@ -2,6 +2,7 @@ import { defineRelations } from "drizzle-orm";
 import {boolean, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, varchar} from "drizzle-orm/pg-core";
 
 export const userRoles = ["standard", "exec", "admin"] as const;
+export type UserRole = (typeof userRoles)[number];
 export const rolesEnum = pgEnum("roles", userRoles);
 
 export const taskPriorities = ["low", "medium", "high"] as const;

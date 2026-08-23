@@ -43,7 +43,7 @@ authApp.post("/login", zValidator("json", LoginFormSchema), async (c) => {
         httpOnly: true
     });
 
-    const currentUserData = await fetchCurrentUserData(tokenData);
+    const currentUserData = await fetchCurrentUserData(tokenData, db);
     return c.json(currentUserData, 200);
 });
 

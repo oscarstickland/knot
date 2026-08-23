@@ -5,6 +5,9 @@ const ClubEventSchema = z.object({
     name: z.string().min(1, "Event name cannot be empty"),
     start: z.string().datetime({ offset: true }).pipe(z.coerce.date()),
     end: z.string().datetime({ offset: true }).pipe(z.coerce.date())
+}).refine((data) => data.start < data.end, {
+    message: "Event must start before it ends",
+    path: ["end"]
 });
 
 export const UpdateEventSchema = ClubEventSchema;

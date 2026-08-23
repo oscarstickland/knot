@@ -5,9 +5,10 @@ import * as argon2 from 'argon2';
 import {DBConnection, type DbEnv} from "../db/connection";
 import { HTTPException } from "hono/http-exception";
 import { getCookie } from "hono/cookie";
-import { usersTable } from "../db/schema";
+import {relations, usersTable} from "../db/schema";
 import { and, eq } from "drizzle-orm";
 import { decode } from "hono/jwt";
+import type {NodePgDatabase} from "drizzle-orm/node-postgres";
 
 export const AUTH_COOKIE_NAME = "KnotAuth";
 export const JWT_SECRET = process.env.JWT_SECRET!;
@@ -45,22 +46,22 @@ export const isAuthenticated = createMiddleware<UserEnv & DbEnv>(async (c, next)
     }
     const tokenData = result.data;
 
-    const currentUserData = await fetchCurrentUserData(tokenData);
+    const currentUserData = await fetchCurrentUserData(tokenData, db);
     c.set("user", currentUserData);
 
     await next();
 });
 
-export async function fetchCurrentUserData(tokenData: JWTUserData): Promise<CurrentUserData> {
+export async function fetchCurrentUserData(tokenData: JWTUserData, db: NodePgDatabase<typeof relations>): Promise<CurrentUserData> {
     // Find user from database
-    const user = await DBConnection.query.usersTable.findFirst({
+    const user = await db.query.usersTable.findFirst({
         where: {
             id: tokenData.id, email: tokenData.email
         },
         with: {
             club: true
         }
-    })
+    });
 
     if (!user) {
         console.error("Unable to find the user in the database");
