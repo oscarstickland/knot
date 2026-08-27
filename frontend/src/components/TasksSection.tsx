@@ -9,6 +9,7 @@ import {
     Select,
     Space,
     Table,
+    Tabs,
     Tag,
     Tooltip,
     Typography,
@@ -28,9 +29,10 @@ import {
 import type { ClubMember } from "@knot/backend/user";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
 import { useUser } from "@/lib/auth.tsx";
+import { taskListKey } from "@/lib/tasks.ts";
 import { TaskModal } from "@/components/TaskModal.tsx";
 import dayjs from "dayjs";
-import { EditOutlined, LinkOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
+import { EditOutlined, InboxOutlined, LinkOutlined, PlusOutlined, UndoOutlined, UserOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
 
@@ -59,7 +61,8 @@ export function TasksSection(props: { eventId: number }) {
     const { token } = theme.useToken();
     const user = useUser();
     const isTaskManager = user.role === "admin" || user.role === "exec";
-    const { data: tasks, isLoading, error } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${props.eventId}`);
+    const [showArchived, setShowArchived] = useState(false);
+    const { data: tasks, isLoading, error } = useSWR<TaskWithRelations[]>(taskListKey(props.eventId, showArchived));
     const { data: members } = useSWR<ClubMember[]>(isTaskManager ? "/user" : null);
     const memberById = new Map((members ?? []).map((member) => [member.id, member]));
 
@@ -75,15 +78,27 @@ export function TasksSection(props: { eventId: number }) {
             paddingBottom: "16px"
         }}>
             <Text strong style={{ fontSize: "16px" }}>Tasks</Text>
-            { isTaskManager ? <TaskModal mode="create" eventId={props.eventId} /> : "" }
+            { isTaskManager && !showArchived ? <TaskModal mode="create" eventId={props.eventId} /> : "" }
         </div>
+
+        { isTaskManager
+            ? <Tabs
+                activeKey={showArchived ? "archived" : "active"}
+                onChange={(key) => setShowArchived(key === "archived")}
+                items={[
+                    { key: "active", label: "Active" },
+                    { key: "archived", label: "Archived" }
+                ]}
+            />
+            : ""
+        }
 
         <Table
             rowKey="id"
             loading={isLoading}
             dataSource={tasks ?? []}
             pagination={false}
-            locale={{ emptyText: <Empty description="No tasks yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+            locale={{ emptyText: <Empty description={showArchived ? "No archived tasks" : "No tasks yet"} image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
             expandable={{
                 expandedRowRender: (task) => (
                     <TaskDetailsRow task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
@@ -142,14 +157,19 @@ export function TasksSection(props: { eventId: number }) {
                 {
                     key: "actions",
                     title: "",
-                    width: 40,
+                    width: 80,
                     render: (_, task) => isTaskManager
-                        ? <TaskModal
-                            mode="update"
-                            eventId={props.eventId}
-                            task={task}
-                            trigger={<Button size="small" type="text" icon={<EditOutlined />} />}
-                        />
+                        ? <Space size={0}>
+                            { task.archived
+                                ? null
+                                : <TaskModal
+                                    mode="update"
+                                    eventId={props.eventId}
+                                    task={task}
+                                    trigger={<Button size="small" type="text" icon={<EditOutlined />} />}
+                                /> }
+                            <ArchiveButton task={task} eventId={props.eventId} />
+                        </Space>
                         : null
                 }
             ] as TableProps<TaskWithRelations>['columns']}
@@ -161,12 +181,12 @@ function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTas
     const user = useUser();
     const [api, contextHolder] = notification.useNotification();
     const isAssigned = props.task.assignments.some((assignment) => assignment.userId === user.id);
-    const canEdit = props.isTaskManager || isAssigned;
+    const canEdit = (props.isTaskManager || isAssigned) && !props.task.archived;
 
     const updateProgress = (progress: string) => {
         AxiosInstance.patch(`/tasks/${props.task.id}/progress`, { progress })
             .then(async () => {
-                await mutate(`/tasks?eventId=${props.eventId}`);
+                await mutate(taskListKey(props.eventId));
             })
             .catch((err) => {
                 const message = err?.response?.data?.message ?? "Task progress could not be updated.";
@@ -191,13 +211,54 @@ function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTas
     </>
 }
 
+function ArchiveButton(props: { task: TaskWithRelations; eventId: number }) {
+    const [api, contextHolder] = notification.useNotification();
+    const isArchived = props.task.archived;
+
+    const toggleArchived = () => {
+        AxiosInstance.patch(`/tasks/${props.task.id}/archive`, { archived: !isArchived })
+            .then(async () => {
+                // The task moves between the two lists, so both need revalidating.
+                await mutate(taskListKey(props.eventId, false));
+                await mutate(taskListKey(props.eventId, true));
+                api["success"]({
+                    title: "Success",
+                    description: `Task has been ${isArchived ? "restored" : "archived"}.`
+                });
+            })
+            .catch((err) => {
+                const message = err?.response?.data?.message
+                    ?? `Task could not be ${isArchived ? "restored" : "archived"}.`;
+                api["error"]({ title: "Error", description: message });
+            });
+    }
+
+    return <>
+        {contextHolder}
+        <Tooltip title={isArchived ? "Restore" : "Archive"}>
+            <Button
+                size="small"
+                type="text"
+                icon={isArchived ? <UndoOutlined /> : <InboxOutlined />}
+                onClick={toggleArchived}
+            />
+        </Tooltip>
+    </>
+}
+
 function TaskDetailsRow(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
     const { token } = theme.useToken();
     const user = useUser();
-    const { data: eventTasks } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${props.eventId}`);
-    const taskById = new Map((eventTasks ?? []).map((task) => [task.id, task]));
+    // An archived task may depend on active ones, so titles are resolved across both lists.
+    const { data: activeTasks } = useSWR<TaskWithRelations[]>(taskListKey(props.eventId, false));
+    const { data: archivedTasks } = useSWR<TaskWithRelations[]>(
+        props.isTaskManager ? taskListKey(props.eventId, true) : null
+    );
+    const taskById = new Map(
+        [...(activeTasks ?? []), ...(archivedTasks ?? [])].map((task) => [task.id, task])
+    );
     const isAssigned = props.task.assignments.some((assignment) => assignment.userId === user.id);
-    const canAddDocument = props.isTaskManager || isAssigned;
+    const canAddDocument = (props.isTaskManager || isAssigned) && !props.task.archived;
 
     return <div style={{ padding: "8px 16px", background: token.colorBgLayout }}>
         {props.task.dependsOn.length > 0 && <div style={{ marginBottom: "12px" }}>
@@ -243,7 +304,7 @@ function AddDocumentForm(props: { taskId: number; eventId: number }) {
     const submit = (data: AddDocumentFormData) => {
         AxiosInstance.post(`/tasks/${props.taskId}/documents`, data)
             .then(async () => {
-                await mutate(`/tasks?eventId=${props.eventId}`);
+                await mutate(taskListKey(props.eventId));
                 reset();
             })
             .catch((err) => {
