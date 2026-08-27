@@ -13,6 +13,7 @@
     "@hookform/resolvers": "^5.5.7",
     "@knot/backend": "workspace:*",
     "antd": "^6.5.2",
+    "antd-style": "^4.1.0",
     "axios": "^1.18.1",
     "dayjs": "^1.11.21",
     "react": "^19",

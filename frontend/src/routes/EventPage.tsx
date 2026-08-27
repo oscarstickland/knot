@@ -4,7 +4,6 @@ import useSWR, {mutate} from "swr";
 import {type ClubEvent, UpdateEventSchema} from "@knot/backend/events";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import {z} from "zod";
 import {EventModal} from "@/components/EventModal.tsx";
 import {TasksSection} from "@/components/TasksSection.tsx";
 import {AxiosInstance} from "@/lib/fetcher.tsx";

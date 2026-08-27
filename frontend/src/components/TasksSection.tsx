@@ -31,6 +31,7 @@ import { useUser } from "@/lib/auth.tsx";
 import { TaskModal } from "@/components/TaskModal.tsx";
 import dayjs from "dayjs";
 import { EditOutlined, LinkOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
+import { progressColor, progressLabel } from "@/components/TaskStatusPill.tsx";
 
 const { Text } = Typography;
 
@@ -39,16 +40,6 @@ const priorityColor: Record<string, string> = {
     medium: "gold",
     high: "red"
 };
-
-const progressColor: Record<string, string> = {
-    backlog: "default",
-    in_progress: "blue",
-    in_review: "purple",
-    completed: "green"
-};
-
-const progressLabel = (progress: string) =>
-    progress.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 
 const progressOptions = taskProgressStates.map((progress) => ({
     label: progressLabel(progress),

@@ -262,6 +262,77 @@ describe("Task Integration Test", () => {
         });
     });
 
+    describe("GET /api/tasks/me", () => {
+        it("returns an empty list for a user with no assignments", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            await setupTask(event.id, admin.id, "Unassigned Task");
+
+            const res = await app.request("/api/tasks/me", { headers: { cookie } });
+            expect(res.status).toBe(200);
+            const body = await res.json() as Task[];
+            expect(body).toEqual([]);
+        });
+
+        it("only returns tasks explicitly assigned to the requesting user", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user: member, cookie } = await harness.setupUser("member@test.com", "standard", club.id, "Member");
+            const { user: other } = await harness.setupUser("other@test.com", "standard", club.id, "Other");
+
+            const assignedTask = await setupTask(event.id, admin.id, "Assigned To Me");
+            await assignUser(assignedTask.id, member.id);
+
+            const othersTask = await setupTask(event.id, admin.id, "Assigned To Someone Else");
+            await assignUser(othersTask.id, other.id);
+
+            await setupTask(event.id, admin.id, "Unassigned Task");
+
+            const res = await app.request("/api/tasks/me", { headers: { cookie } });
+            expect(res.status).toBe(200);
+            const body = await res.json() as Task[];
+            expect(body.map((task) => task.id)).toEqual([assignedTask.id]);
+        });
+
+        it("does not return tasks assigned to a different user in the same club", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { cookie } = await harness.setupUser("member@test.com", "standard", club.id, "Member");
+            const { user: other } = await harness.setupUser("other@test.com", "standard", club.id, "Other");
+
+            const othersTask = await setupTask(event.id, admin.id, "Assigned To Someone Else");
+            await assignUser(othersTask.id, other.id);
+
+            const res = await app.request("/api/tasks/me", { headers: { cookie } });
+            expect(res.status).toBe(200);
+            const body = await res.json() as Task[];
+            expect(body).toEqual([]);
+        });
+
+        it("does not return tasks from a different club", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const otherClub = await harness.setupClub("Other Club");
+            const otherEvent = await setupEvent(otherClub.id);
+            const { user: otherAdmin } = await harness.setupUser("other-admin@test.com", "admin", otherClub.id, "Other Admin");
+            const { cookie } = await harness.setupUser("member@test.com", "standard", club.id, "Member");
+
+            const foreignTask = await setupTask(otherEvent.id, otherAdmin.id, "Foreign Task");
+            await assignUser(foreignTask.id, otherAdmin.id);
+
+            const res = await app.request("/api/tasks/me", { headers: { cookie } });
+            expect(res.status).toBe(200);
+            const body = await res.json() as Task[];
+            expect(body).toEqual([]);
+        });
+    });
+
     describe("PATCH /api/tasks/:id/progress (dependency-aware completion)", () => {
         it("prevents completing a task while a task it depends on is incomplete", async () => {
             const app = await harness.setupApp();

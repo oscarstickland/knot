@@ -1,6 +1,7 @@
 import type { tasksTable, taskAuditLogTable, taskDocumentsTable, taskAssignmentsTable, taskDependenciesTable } from "../db/schema.ts";
 import { taskPriorities, taskProgressStates } from "../db/schema.ts";
 import { z } from "zod";
+import type { ClubEvent } from "./events.ts";
 
 export { taskPriorities, taskProgressStates };
 
@@ -40,6 +41,7 @@ export type TaskWithRelations = Task & {
     assignments: TaskAssignment[];
     dependsOn: TaskDependency[];
     documents: TaskDocument[];
+    event: ClubEvent;
 };
 
 export type TaskDetail = TaskWithRelations & {
