@@ -7,6 +7,7 @@ import { serveStatic } from "hono/bun";
 import {eventsApp} from "./routes/events.ts";
 import {HTTPException} from "hono/http-exception";
 import { tasksApp } from "./routes/tasks.ts";
+import { logger } from "hono/logger";
 
 export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabase) {
     const app = new Hono();
@@ -22,6 +23,7 @@ export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabas
     }
 
     app.use("*", dbMiddleware);
+    app.use(logger());
 
     app.route("/api/user", userApp);
     app.route("/api/auth", authApp);
