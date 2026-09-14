@@ -40,6 +40,7 @@ export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabas
             return context.json({ message: err.message || undefined }, err.status);
         }
 
+        console.error(err);
         return context.json({ message: undefined }, 500);
     })
 
