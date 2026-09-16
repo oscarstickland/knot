@@ -17,9 +17,9 @@
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
-    "antd": "^6.6.1"
+    "antd": "^6.6.2"
   }
 }
