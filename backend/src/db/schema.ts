@@ -35,6 +35,7 @@ export const eventsTable = pgTable("events", {
     end: timestamp("end_time", { mode: "date", withTimezone: true }).notNull(),
     clubId: integer("club_id").notNull(),
     archived: boolean("archived").default(false).notNull(),
+    attendanceOpen: boolean("attendance_open").default(false).notNull(),
 });
 
 export const tasksTable = pgTable("tasks", {
@@ -81,6 +82,14 @@ export const taskAuditLogTable = pgTable("task_audit_log", {
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
 });
 
+export const eventAttendanceTable = pgTable("event_attendance", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    eventId: integer("event_id").notNull(),
+    name: varchar({ length: 250 }).notNull(),
+    email: varchar({ length: 255 }).notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull()
+})
+
 export const relations = defineRelations({
     clubsTable,
     usersTable,
@@ -89,7 +98,8 @@ export const relations = defineRelations({
     taskAssignmentsTable,
     taskDependenciesTable,
     taskDocumentsTable,
-    taskAuditLogTable
+    taskAuditLogTable,
+    eventAttendanceTable
 }, (r) => ({
     usersTable: {
         club: r.one.clubsTable({
@@ -101,7 +111,8 @@ export const relations = defineRelations({
         club: r.one.clubsTable({
             from: r.eventsTable.clubId,
             to: r.clubsTable.id
-        })
+        }),
+        attendance: r.many.eventAttendanceTable()
     },
     clubsTable: {
         users: r.many.usersTable(),
@@ -166,6 +177,12 @@ export const relations = defineRelations({
         changedByUser: r.one.usersTable({
             from: r.taskAuditLogTable.changedBy,
             to: r.usersTable.id
+        })
+    },
+    eventAttendanceTable: {
+        event: r.one.eventsTable({
+            from: r.eventAttendanceTable.eventId,
+            to: r.eventsTable.id
         })
     }
 }));
