@@ -11,7 +11,7 @@ import type {AxiosError} from "axios";
 import {useUser} from "@/lib/auth.tsx";
 import {InboxOutlined} from "@ant-design/icons";
 import { OverviewTab } from "./OverviewTab";
-import { TasksTab } from "./Taskstab";
+import { TasksTab } from "./TasksTab";
 import { BudgetTab } from "./BudgetTab";
 import { AttendanceTab } from "./AttendanceTab";
 import { DocumentsTab } from "./DocumentsTab";
