@@ -13,6 +13,20 @@ export const EventAttendanceInfoSchema = z.object({
     end: z.coerce.date()
 });
 
+export const AttendanceSummarySchema = z.object({
+    checkedIn: z.number().int().nonnegative(),
+    lastCheckIn: z.coerce.date().nullable()
+});
+
+export const AttendanceCheckInSchema = z.object({
+    id: z.number().int().positive(),
+    name: z.string(),
+    email: z.string().email(),
+    createdAt: z.coerce.date()
+});
+
 export type RegisterAttendanceData = z.infer<typeof RegisterAttendanceSchema>;
 export type EventAttendanceInfo = z.infer<typeof EventAttendanceInfoSchema>;
+export type AttendanceSummary = z.infer<typeof AttendanceSummarySchema>;
+export type AttendanceCheckIn = z.infer<typeof AttendanceCheckInSchema>;
 export type EventAttendance = typeof eventAttendanceTable.$inferSelect;
