@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Alert, Button, Card, Col, ConfigProvider, notification, Row, Statistic, Table, theme, Typography, type TableProps } from "antd";
+import { Alert, Button, Card, Col, ConfigProvider, notification, Progress, Row, Statistic, Table, theme, Typography, type TableProps } from "antd";
 import { CopyOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { ClubEvent } from "@knot/backend/events";
 import type { AttendanceCheckIn, AttendanceSummary } from "@knot/backend/event-attendance";
@@ -117,18 +117,28 @@ export function AttendanceTab(props: { event: ClubEvent }) {
         </Card>
 
         <div style={{ flex: "2 1 66%", display: "flex", flexDirection: "column", gap: "1.5em" }}>
-            <Row gutter={16}>
-                <Col span={8}>
-                    <Card size="small" styles={{ body: { textAlign: "center" } }}>
+            <Row gutter={16} align="stretch">
+                <Col span={16}>
+                    <Card size="small" style={{ height: "100%" }} styles={{ body: { textAlign: "center" } }}>
                         <Statistic
                             title="Checked in"
                             loading={summaryLoading}
                             value={summaryError ? "—" : summary?.checkedIn ?? 0}
+                            suffix={!summaryError && props.event.expectedAttendees ? `/ ${props.event.expectedAttendees}` : undefined}
                         />
+                        {!summaryLoading && !summaryError && props.event.expectedAttendees
+                            ? <Progress
+                                percent={Math.min(100, Math.round(((summary?.checkedIn ?? 0) / props.event.expectedAttendees) * 100))}
+                                showInfo={false}
+                                size="small"
+                                style={{ marginTop: "0.5em", paddingInline: "4em" }}
+                            />
+                            : null
+                        }
                     </Card>
                 </Col>
                 <Col span={8}>
-                    <Card size="small" styles={{ body: { textAlign: "center" } }}>
+                    <Card size="small" style={{ height: "100%" }} styles={{ body: { textAlign: "center" } }}>
                         <Statistic
                             title="Last Check-In"
                             loading={summaryLoading}
