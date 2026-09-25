@@ -1,3 +1,4 @@
+
 import {Breadcrumb, Button, Dropdown, Input, Layout, Result, Segmented, Space, Table, type TableProps, theme, Typography} from "antd";
 import {useUser} from "@/lib/auth.tsx";
 import useSWR from "swr";
@@ -69,7 +70,6 @@ interface EventsTable {
     end: Date;
     location: string;
     event: ClubEvent;
-}
 
 function formatEventDate(start: Date, end: Date) {
     const startDate = dayjs(start);
@@ -85,6 +85,7 @@ function EventsTable(props: { filter: "all" | "active" | "archived"; search: str
     const isEventManager = user.role === "admin" || user.role === "exec";
     const archivedParam = props.filter === "active" ? "false" : props.filter === "archived" ? "true" : "all";
     const { data, isLoading, error } = useSWR<ClubEvent[]>(`/events?archived=${archivedParam}`);
+
     const [editingEvent, setEditingEvent] = useState<ClubEvent | null>(null);
 
     const columns: TableProps<EventsTable>['columns'] = [
