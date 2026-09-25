@@ -142,6 +142,8 @@ export function EventModal({ mode, event }: EventFormModalProps) {
                     />
                 </Form.Item>
                 <Form.Item
+                    label={<span style={labelStyle}>Expected Attendees</span>}
+                    layout="vertical"
                     validateStatus={errors.expectedAttendees ? "error" : ""}
                     help={errors.expectedAttendees?.message}
                 >
