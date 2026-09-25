@@ -1,5 +1,5 @@
 import { defineRelations } from "drizzle-orm";
-import {boolean, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, varchar} from "drizzle-orm/pg-core";
+import {boolean, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, unique, varchar} from "drizzle-orm/pg-core";
 
 export const userRoles = ["standard", "exec", "admin"] as const;
 export type UserRole = (typeof userRoles)[number];
@@ -88,7 +88,9 @@ export const eventAttendanceTable = pgTable("event_attendance", {
     name: varchar({ length: 250 }).notNull(),
     email: varchar({ length: 255 }).notNull(),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull()
-})
+}, (table) => [
+    unique().on(table.eventId, table.email)
+])
 
 export const relations = defineRelations({
     clubsTable,
