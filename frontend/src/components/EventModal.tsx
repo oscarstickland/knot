@@ -141,7 +141,6 @@ export function EventModal({ mode, event }: EventFormModalProps) {
                         )}
                     />
                 </Form.Item>
-
                 <Form.Item
                     validateStatus={errors.expectedAttendees ? "error" : ""}
                     help={errors.expectedAttendees?.message}
@@ -160,7 +159,6 @@ export function EventModal({ mode, event }: EventFormModalProps) {
                         )}
                     />
                 </Form.Item>
-
             </form>
         </Drawer>
         <Button
