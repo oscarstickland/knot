@@ -22,9 +22,11 @@ eventsApp.get("/", async (c) => {
     }
 
     const events = await db.query.eventsTable.findMany({
-        where: archivedParam === "all"
-            ? { clubId: user.club.id }
-            : { clubId: user.club.id, archived: archivedParam === "true" }
+        where: archivedParam === "true"
+            ? { clubId: user.club.id, archived: true }
+            : archivedParam === "false"
+                ? { clubId: user.club.id, archived: false }
+                : { clubId: user.club.id }
     });
 
     return c.json(events);
