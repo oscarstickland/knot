@@ -3,7 +3,6 @@ import type { DbEnv } from "../db/connection";
 import { HTTPException } from "hono/http-exception";
 import { RegisterAttendanceSchema } from "../types/event-attendance";
 import { eventAttendanceTable } from "../db/schema";
-import { DatabaseError } from "pg";
 
 const eventAttendanceApp = new Hono<DbEnv>();
 
@@ -29,7 +28,10 @@ eventAttendanceApp.post("/:eventId{[0-9]+}/register", async (c) => {
             email: parsed.data.email
         });
     } catch (err) {
-        if (err instanceof DatabaseError && err.code === "23505") {
+        const errorCode = (err as { code?: string; cause?: { code?: string } }).code
+            ?? (err as { cause?: { code?: string } }).cause?.code;
+
+        if (errorCode === "23505") {
             throw new HTTPException(409, { message: "You have already registered attendance for this event" });
         }
         throw err;

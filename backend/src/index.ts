@@ -29,7 +29,7 @@ export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabas
     app.route("/api/user", userApp);
     app.route("/api/auth", authApp);
     app.route("/api/events", eventsApp);
-    app.route("/api/events/attendance", eventAttendanceApp);
+    app.route("/api/attendance", eventAttendanceApp);
     app.route("/api/tasks", tasksApp);
     app.all("/api/*", (c) => { throw new HTTPException(404) });
 
