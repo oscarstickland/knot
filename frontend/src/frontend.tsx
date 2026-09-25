@@ -12,7 +12,6 @@ import { BrowserRouter } from "react-router";
 import { SWRConfig, type SWRConfiguration } from "swr";
 import { fetcher } from "./lib/fetcher";
 import { AuthProvider } from "./lib/auth";
-import { ConfigProvider } from "antd";
 
 const swrConfig: SWRConfiguration = {
   fetcher: fetcher
@@ -21,15 +20,13 @@ const swrConfig: SWRConfiguration = {
 const elem = document.getElementById("root")!;
 const app = (
   <StrictMode>
-    <ConfigProvider notification={{ placement: "bottomRight" }}>
-      <SWRConfig value={swrConfig}>
-        <AuthProvider>
-          <BrowserRouter>
-            <Root />
-          </BrowserRouter>
-        </AuthProvider>
-      </SWRConfig>
-    </ConfigProvider>
+    <SWRConfig value={swrConfig}>
+      <AuthProvider>
+        <BrowserRouter>
+          <Root />
+        </BrowserRouter>
+      </AuthProvider>
+    </SWRConfig>
   </StrictMode>
 );
 
