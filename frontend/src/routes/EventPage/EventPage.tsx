@@ -115,8 +115,18 @@ function EventInformation(props: { id: string }) {
                 </Space>
                 <br />
                 <Text style={{ color: token.colorTextSecondary }}>
-                    From <strong>{start.format("dddd D MMMM YYYY [at] h:mm A")}</strong> to
-                    {" "}   <strong>{end.format("dddd D MMMM YYYY [at] h:mm A")}</strong>
+                    { start.isSame(end, "day")
+                        ? <>
+                            <strong>{start.format("D MMM YYYY")}</strong>
+                            {", "}
+                            <strong>{start.format("h:mma")} - {end.format("h:mma")}</strong>
+                        </>
+                        : <>
+                            From <strong>{start.format("dddd D MMMM YYYY [at] h:mm A")}</strong> to
+                            {" "}   <strong>{end.format("dddd D MMMM YYYY [at] h:mm A")}</strong>
+                        </>
+                    }
+                    <span> • {data.location}</span>
                 </Text>
             </div>
 
