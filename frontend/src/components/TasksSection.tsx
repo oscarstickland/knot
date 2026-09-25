@@ -58,14 +58,13 @@ export function TasksSection(props: { eventId: number }) {
         return <Result status="error" title="Retrieval Error" subTitle="Unable to fetch tasks." />
     }
 
-    return <div style={{ marginTop: "32px" }}>
+    return <div>
         <div style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            justifyContent: 'flex-end',
             paddingBottom: "16px"
         }}>
-            <Text strong style={{ fontSize: "16px" }}>Tasks</Text>
             { isTaskManager ? <TaskModal mode="create" eventId={props.eventId} /> : "" }
         </div>
 
