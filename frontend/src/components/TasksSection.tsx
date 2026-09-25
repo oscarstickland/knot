@@ -76,11 +76,6 @@ export function TasksSection(props: { eventId: number }) {
             dataSource={tasks ?? []}
             pagination={false}
             locale={{ emptyText: <Empty description="No tasks yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-            expandable={{
-                expandedRowRender: (task) => (
-                    <TaskDetailsRow task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
-                )
-            }}
             columns={[
                 {
                     key: "title",
@@ -180,85 +175,5 @@ function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTas
             style={{ width: "100%" }}
             onChange={updateProgress}
         />
-    </>
-}
-
-function TaskDetailsRow(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
-    const { token } = theme.useToken();
-    const user = useUser();
-    const { data: eventTasks } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${props.eventId}`);
-    const taskById = new Map((eventTasks ?? []).map((task) => [task.id, task]));
-    const isAssigned = props.task.assignments.some((assignment) => assignment.userId === user.id);
-    const canAddDocument = props.isTaskManager || isAssigned;
-
-    return <div style={{ padding: "8px 16px", background: token.colorBgLayout }}>
-        {props.task.dependsOn.length > 0 && <div style={{ marginBottom: "12px" }}>
-            <Text type="secondary" style={{ fontSize: "12px" }}>Depends on: </Text>
-            <Space size={[4, 4]} wrap>
-                {props.task.dependsOn.map((dependency) => {
-                    const dependencyTask = taskById.get(dependency.dependsOnTaskId);
-                    return <Tag key={dependency.dependsOnTaskId} color={dependencyTask?.progress === "completed" ? "green" : "default"}>
-                        {dependencyTask?.title ?? `Task ${dependency.dependsOnTaskId}`}
-                    </Tag>
-                })}
-            </Space>
-        </div>}
-
-        <Text type="secondary" style={{ fontSize: "12px" }}>Links:</Text>
-        <div style={{ marginTop: "4px", marginBottom: "8px" }}>
-            {props.task.documents.length === 0
-                ? <Text type="secondary" style={{ fontSize: "12px" }}>No links added yet.</Text>
-                : <Space direction="vertical" size={2}>
-                    {props.task.documents.map((document) => (
-                        <a key={document.id} href={document.url} target="_blank" rel="noreferrer">
-                            <LinkOutlined /> {document.url}
-                        </a>
-                    ))}
-                </Space>
-            }
-        </div>
-
-        {canAddDocument && <AddDocumentForm taskId={props.task.id} eventId={props.eventId} />}
-    </div>
-}
-
-const AddDocumentFormSchema = AddTaskDocumentSchema;
-type AddDocumentFormData = z.infer<typeof AddDocumentFormSchema>;
-
-function AddDocumentForm(props: { taskId: number; eventId: number }) {
-    const [api, contextHolder] = useAppNotification();
-    const { handleSubmit, formState: { errors }, control, reset } = useForm<AddDocumentFormData>({
-        resolver: zodResolver(AddDocumentFormSchema),
-        defaultValues: { url: "" }
-    });
-
-    const submit = (data: AddDocumentFormData) => {
-        AxiosInstance.post(`/tasks/${props.taskId}/documents`, data)
-            .then(async () => {
-                await mutate(`/tasks?eventId=${props.eventId}`);
-                reset();
-            })
-            .catch((err) => {
-                const message = err?.response?.data?.message ?? "Link could not be added.";
-                api["error"]({ title: "Error", description: message });
-            });
-    }
-
-    return <>
-        {contextHolder}
-        <form onSubmit={handleSubmit(submit)} style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
-            <Form.Item
-                validateStatus={errors.url ? "error" : ""}
-                help={errors.url?.message}
-                style={{ marginBottom: 0, flex: 1 }}
-            >
-                <Controller
-                    name="url"
-                    control={control}
-                    render={({ field }) => <Input {...field} size="small" placeholder="https://..." />}
-                />
-            </Form.Item>
-            <Button size="small" icon={<PlusOutlined />} htmlType="submit">Add Link</Button>
-        </form>
     </>
 }
