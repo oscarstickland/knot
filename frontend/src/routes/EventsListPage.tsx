@@ -1,4 +1,5 @@
-import {Breadcrumb, Button, Dropdown, Layout, Result, Table, Tabs, type TableProps, theme, Typography} from "antd";
+
+import {Breadcrumb, Button, Dropdown, Input, Layout, Result, Segmented, Space, Table, type TableProps, theme, Typography} from "antd";
 import {useUser} from "@/lib/auth.tsx";
 import useSWR from "swr";
 import type {ClubEvent} from "@knot/backend/events";
@@ -14,7 +15,8 @@ export function EventsListPage() {
     const { token } = theme.useToken();
     const user = useUser();
     const isEventManager = user.role === "admin" || user.role === "exec";
-    const [showArchived, setShowArchived] = useState(false);
+    const [filter, setFilter] = useState<"all" | "active" | "archived">("active");
+    const [search, setSearch] = useState("");
 
     return <Layout style={{ padding: "24px 24px" }}>
         <Layout
@@ -34,19 +36,28 @@ export function EventsListPage() {
                 { isEventManager ? <EventModal mode={"create"} /> : "" }
             </div>
 
-            { isEventManager
-                ? <Tabs
-                    activeKey={showArchived ? "archived" : "active"}
-                    onChange={(key) => setShowArchived(key === "archived")}
-                    items={[
-                        { key: "active", label: "Active" },
-                        { key: "archived", label: "Archived" }
-                    ]}
+            <Space style={{ paddingBottom: 24 }} wrap>
+                <Input.Search
+                    placeholder="Search events"
+                    allowClear
+                    style={{ width: 260 }}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
                 />
-                : ""
-            }
+                { isEventManager &&
+                    <Segmented
+                        value={filter}
+                        onChange={(value) => setFilter(value as "all" | "active" | "archived")}
+                        options={[
+                            { label: "All", value: "all" },
+                            { label: "Active", value: "active" },
+                            { label: "Archived", value: "archived" }
+                        ]}
+                    />
+                }
+            </Space>
 
-            <EventsTable archived={showArchived} />
+            <EventsTable filter={isEventManager ? filter : "active"} search={search} />
 
         </Layout>
     </Layout>
@@ -70,10 +81,12 @@ function formatEventDate(start: Date, end: Date) {
         : `${startDate.format("D MMM YYYY, h:mma")} - ${endDate.format("D MMM YYYY, h:mma")}`;
 }
 
-function EventsTable(props: { archived: boolean }) {
+function EventsTable(props: { filter: "all" | "active" | "archived"; search: string }) {
     const user = useUser();
     const isEventManager = user.role === "admin" || user.role === "exec";
-    const { data, isLoading, error } = useSWR<ClubEvent[]>(`/events?archived=${props.archived}`);
+    const archivedParam = props.filter === "active" ? "false" : props.filter === "archived" ? "true" : "all";
+    const { data, isLoading, error } = useSWR<ClubEvent[]>(`/events?archived=${archivedParam}`);
+
     const [editingEvent, setEditingEvent] = useState<ClubEvent | null>(null);
 
     const columns: TableProps<EventsTable>['columns'] = [
@@ -117,15 +130,20 @@ function EventsTable(props: { archived: boolean }) {
         }] : [])
     ]
 
+    const search = props.search.trim().toLowerCase();
     const tableData: EventsTable[] = data
-        ? data.map((row) => ({
-            key: row.id,
-            name: row.name,
-            start: row.start,
-            end: row.end,
-            location: row.location,
-            event: row
-        }))
+        ? data
+            .filter((row) => !search
+                || row.name.toLowerCase().includes(search)
+                || row.location.toLowerCase().includes(search))
+            .map((row) => ({
+                key: row.id,
+                name: row.name,
+                start: row.start,
+                end: row.end,
+                location: row.location,
+                event: row
+            }))
         : [];
 
     if (error) {
