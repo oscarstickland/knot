@@ -14,6 +14,7 @@ import useSWR, { mutate } from "swr";
 import dayjs from "dayjs";
 import { EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { z } from "zod";
+import { useAppNotification } from "@/lib/useAppNotification";
 
 const { TextArea } = Input;
 
@@ -31,7 +32,7 @@ type TaskModalProps =
 
 export function TaskModal({ mode, eventId, task, trigger }: TaskModalProps) {
     const [open, setOpen] = useState(false);
-    const [api, contextHolder] = notification.useNotification();
+    const [api, contextHolder] = useAppNotification();
     const isEditMode = mode === "update";
 
     const { data: members } = useSWR<ClubMember[]>("/user");
