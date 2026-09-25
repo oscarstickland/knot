@@ -96,6 +96,116 @@ describe("Database Integration Test", () => {
         expect(updatedEvent!.end).toEqual(new Date(referenceDate.valueOf() + 7000));
     });
 
+    it.each(["admin", "exec"])("allows %s to set the expected attendees when creating an event", async (role) => {
+        const app = await harness.setupApp();
+        const club = await harness.setupClub("Club");
+        const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+
+        const res = await app.request("/api/events", {
+            method: "POST",
+            headers: { cookie },
+            body: JSON.stringify({
+                name: "Hello",
+                start: new Date(),
+                end: new Date(Date.now() + 5000),
+                expectedAttendees: 150
+            })
+        });
+        expect(res.status).toBe(201);
+
+        const event = await harness.db.query.eventsTable.findFirst({
+            where: { name: "Hello", clubId: club.id }
+        });
+        expect(event?.expectedAttendees).toBe(150);
+    });
+
+    it("treats an empty string as no expected attendees when creating an event", async () => {
+        const app = await harness.setupApp();
+        const club = await harness.setupClub("Club");
+        const { cookie } = await harness.setupUser("test@test.com", "admin", club.id, "User");
+
+        const res = await app.request("/api/events", {
+            method: "POST",
+            headers: { cookie },
+            body: JSON.stringify({
+                name: "Hello",
+                start: new Date(),
+                end: new Date(Date.now() + 5000),
+                expectedAttendees: ""
+            })
+        });
+        expect(res.status).toBe(201);
+
+        const event = await harness.db.query.eventsTable.findFirst({
+            where: { name: "Hello", clubId: club.id }
+        });
+        expect(event?.expectedAttendees).toBeNull();
+    });
+
+    it.each(["admin", "exec"])("allows %s to update the expected attendees on an event", async (role) => {
+        const app = await harness.setupApp();
+        const club = await harness.setupClub("Club");
+        const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+        const referenceDate = new Date();
+
+        const [event] = await harness.db
+            .insert(eventsTable)
+            .values({ name: "Event", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id })
+            .returning();
+
+        const res = await app.request(`/api/events/${event!.id}`, {
+            method: "PUT",
+            headers: { cookie },
+            body: JSON.stringify({
+                name: "Event",
+                start: referenceDate,
+                end: new Date(referenceDate.valueOf() + 5000),
+                expectedAttendees: 80
+            })
+        });
+        expect(res.status).toBe(200);
+
+        const updatedEvent = await harness.db.query.eventsTable.findFirst({
+            where: { id: event!.id }
+        });
+        expect(updatedEvent!.expectedAttendees).toBe(80);
+    });
+
+    it("treats an empty string as clearing the expected attendees when updating an event", async () => {
+        const app = await harness.setupApp();
+        const club = await harness.setupClub("Club");
+        const { cookie } = await harness.setupUser("test@test.com", "admin", club.id, "User");
+        const referenceDate = new Date();
+
+        const [event] = await harness.db
+            .insert(eventsTable)
+            .values({
+                name: "Event",
+                start: referenceDate,
+                end: new Date(referenceDate.valueOf() + 5000),
+                clubId: club.id,
+                expectedAttendees: 50
+            })
+            .returning();
+
+        const res = await app.request(`/api/events/${event!.id}`, {
+            method: "PUT",
+            headers: { cookie },
+            body: JSON.stringify({
+                name: "Event",
+                start: referenceDate,
+                end: new Date(referenceDate.valueOf() + 5000),
+                expectedAttendees: ""
+            })
+        });
+        expect(res.status).toBe(200);
+
+        const updatedEvent = await harness.db.query.eventsTable.findFirst({
+            where: { id: event!.id }
+        });
+        expect(updatedEvent!.expectedAttendees).toBeNull();
+    });
+
     it("prevents standard users from updating events", async () => {
         const app = await harness.setupApp();
         const club = await harness.setupClub("Club");

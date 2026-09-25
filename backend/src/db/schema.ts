@@ -37,6 +37,7 @@ export const eventsTable = pgTable("events", {
     clubId: integer("club_id").notNull(),
     archived: boolean("archived").default(false).notNull(),
     attendanceOpen: boolean("attendance_open").default(false).notNull(),
+    expectedAttendees: integer("expected_attendees"),
 });
 
 export const tasksTable = pgTable("tasks", {
