@@ -24,7 +24,7 @@ describe("Database Integration Test", () => {
     it("returns 404 when registering attendance for an event that does not exist", async () => {
         const app = await harness.setupApp();
 
-        const res = await app.request("/api/attendance/999999/register", {
+        const res = await app.request("/api/attendance/non-existent-slug/register", {
             method: "POST",
             body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
         });
@@ -40,7 +40,7 @@ describe("Database Integration Test", () => {
             .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: false })
             .returning();
 
-        const res = await app.request(`/api/attendance/${event!.id}/register`, {
+        const res = await app.request(`/api/attendance/${event!.slug}/register`, {
             method: "POST",
             body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
         });
@@ -56,7 +56,7 @@ describe("Database Integration Test", () => {
             .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: true })
             .returning();
 
-        const res = await app.request(`/api/attendance/${event!.id}/register`, {
+        const res = await app.request(`/api/attendance/${event!.slug}/register`, {
             method: "POST",
             body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
         });
@@ -78,13 +78,13 @@ describe("Database Integration Test", () => {
             .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: true })
             .returning();
 
-        const firstRes = await app.request(`/api/attendance/${event!.id}/register`, {
+        const firstRes = await app.request(`/api/attendance/${event!.slug}/register`, {
             method: "POST",
             body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
         });
         expect(firstRes.status).toBe(201);
 
-        const secondRes = await app.request(`/api/attendance/${event!.id}/register`, {
+        const secondRes = await app.request(`/api/attendance/${event!.slug}/register`, {
             method: "POST",
             body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
         });

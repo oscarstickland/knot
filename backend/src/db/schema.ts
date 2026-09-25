@@ -31,6 +31,7 @@ export const usersTable = pgTable("users", {
 export const eventsTable = pgTable("events", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     name: varchar({ length: 255 }).notNull(),
+    slug: varchar({ length: 36 }).notNull().unique().$defaultFn(() => crypto.randomUUID()),
     start: timestamp("start_time", { mode: "date", withTimezone: true }).notNull(),
     end: timestamp("end_time", { mode: "date", withTimezone: true }).notNull(),
     clubId: integer("club_id").notNull(),

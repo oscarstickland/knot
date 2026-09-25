@@ -6,16 +6,16 @@ import { eventAttendanceTable } from "../db/schema";
 
 const eventAttendanceApp = new Hono<DbEnv>();
 
-eventAttendanceApp.post("/:eventId{[0-9]+}/register", async (c) => {
+eventAttendanceApp.post("/:slug/register", async (c) => {
     const db = c.get("db");
-    const eventId = Number(c.req.param("eventId"));
+    const slug = c.req.param("slug");
     const body = await c.req.json();
 
     const parsed = RegisterAttendanceSchema.safeParse(body);
     if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId }
+        where: { slug }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -23,7 +23,7 @@ eventAttendanceApp.post("/:eventId{[0-9]+}/register", async (c) => {
 
     try {
         await db.insert(eventAttendanceTable).values({
-            eventId,
+            eventId: event.id,
             name: parsed.data.name,
             email: parsed.data.email
         });
