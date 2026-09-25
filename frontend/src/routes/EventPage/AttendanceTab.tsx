@@ -1,8 +1,8 @@
 import { useRef } from "react";
-import { Button, Card, Col, notification, Row, Statistic, theme, Typography } from "antd";
+import { Alert, Button, Card, Col, ConfigProvider, notification, Row, Statistic, Table, theme, Typography, type TableProps } from "antd";
 import { CopyOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { ClubEvent } from "@knot/backend/events";
-import type { AttendanceSummary } from "@knot/backend/event-attendance";
+import type { AttendanceCheckIn, AttendanceSummary } from "@knot/backend/event-attendance";
 import QRCode from "react-qr-code";
 import useSWR from "swr";
 import type { AxiosError } from "axios";
@@ -18,6 +18,9 @@ export function AttendanceTab(props: { event: ClubEvent }) {
 
     const { data: summary, error: summaryError, isLoading: summaryLoading } =
         useSWR<AttendanceSummary, AxiosError>(`/attendance/${props.event.id}/summary`);
+
+    const { data: checkIns, error: checkInsError, isLoading: checkInsLoading } =
+        useSWR<AttendanceCheckIn[], AxiosError>(`/attendance/${props.event.id}/check-ins`);
 
     const copyUrl = () => {
         navigator.clipboard.writeText(checkInUrl)
@@ -146,7 +149,32 @@ export function AttendanceTab(props: { event: ClubEvent }) {
                 </Col>
             </Row>
 
-            <Card title="Recent Check Ins">
+            <Card title="Recent Check Ins" styles={{ body: { padding: checkInsError ? undefined : 0 } }}>
+                {checkInsError
+                    ? <Alert type="error" showIcon message="Unable to load check-ins." />
+                    : <ConfigProvider theme={{ components: { Table: { headerBorderRadius: 0 } } }}>
+                        <Table
+                            rowKey="id"
+                            loading={checkInsLoading}
+                            dataSource={checkIns ?? []}
+                            pagination={{
+                                showSizeChanger: true,
+                                pageSizeOptions: [10, 20, 50, 100],
+                                defaultPageSize: 10,
+                                style: { paddingInline: "1em" }
+                            }}
+                            columns={[
+                                { key: "name", title: "Name", dataIndex: "name" },
+                                { key: "email", title: "Email", dataIndex: "email" },
+                                {
+                                    key: "createdAt",
+                                    title: "Checked in",
+                                    render: (_, record) => <span>{dayjs(record.createdAt).format("D MMM, h:mm A")}</span>
+                                }
+                            ] as TableProps<AttendanceCheckIn>['columns']}
+                        />
+                    </ConfigProvider>
+                }
             </Card>
         </div>
     </div>
