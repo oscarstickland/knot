@@ -129,13 +129,8 @@ export function AttendanceTab(props: { event: ClubEvent }) {
                 </Col>
                 <Col span={8}>
                     <Card size="small" styles={{ body: { textAlign: "center" } }}>
-                        <Text type="secondary">Not checked in</Text>
-                    </Card>
-                </Col>
-                <Col span={8}>
-                    <Card size="small" styles={{ body: { textAlign: "center" } }}>
                         <Statistic
-                            title="Last scan"
+                            title="Last Check-In"
                             loading={summaryLoading}
                             value={
                                 summaryError
@@ -151,7 +146,7 @@ export function AttendanceTab(props: { event: ClubEvent }) {
 
             <Card title="Recent Check Ins" styles={{ body: { padding: checkInsError ? undefined : 0 } }}>
                 {checkInsError
-                    ? <Alert type="error" showIcon message="Unable to load check-ins." />
+                    ? <Alert type="error" showIcon title="Unable to load check-ins." />
                     : <ConfigProvider theme={{ components: { Table: { headerBorderRadius: 0 } } }}>
                         <Table
                             rowKey="id"

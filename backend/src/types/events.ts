@@ -5,9 +5,9 @@ const ClubEventSchema = z.object({
     name: z.string().min(1, "Event name cannot be empty"),
     start: z.string().datetime({ offset: true }).pipe(z.coerce.date()),
     end: z.string().datetime({ offset: true }).pipe(z.coerce.date()),
-    expectedAttendees: z.union([z.literal(""), z.coerce.number().int().positive()])
+    expectedAttendees: z.union([z.literal(""), z.null(), z.coerce.number().int().positive()])
         .optional()
-        .transform((value) => (value === "" || value === undefined ? null : value))
+        .transform((value) => (value === "" || value === undefined || value === null ? null : value))
 }).refine((data) => data.start < data.end, {
     message: "Event must start before it ends",
     path: ["end"]

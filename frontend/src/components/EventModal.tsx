@@ -1,6 +1,6 @@
 import {type ClubEvent, type UpdateEventData, UpdateEventSchema} from "@knot/backend/events";
 import {useState} from "react";
-import {Button, DatePicker, Form, Input, Modal, notification} from "antd";
+import {Button, DatePicker, Form, Input, InputNumber, Modal, notification} from "antd";
 import {Controller, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {AxiosInstance} from "@/lib/fetcher.tsx";
@@ -27,7 +27,8 @@ export function EventModal({ mode, event }: EventFormModalProps) {
             name: event.name,
             start: event.start ? new Date(event.start).toISOString() : undefined,
             end: event.end ? new Date(event.end).toISOString() : undefined,
-        } : { name: "", start: undefined, end: undefined },
+            expectedAttendees: event.expectedAttendees ?? "",
+        } : { name: "", start: undefined, end: undefined, expectedAttendees: "" },
     });
 
     const handleCancel = () => {
@@ -123,6 +124,25 @@ export function EventModal({ mode, event }: EventFormModalProps) {
                         />
                     </Form.Item>
                 </div>
+
+                <Form.Item
+                    validateStatus={errors.expectedAttendees ? "error" : ""}
+                    help={errors.expectedAttendees?.message}
+                >
+                    <Controller
+                        name="expectedAttendees"
+                        control={control}
+                        render={({ field }) => (
+                            <InputNumber
+                                style={{ width: "100%" }}
+                                min={1}
+                                placeholder="Expected attendees (optional)"
+                                value={field.value === "" || field.value === undefined ? null : field.value}
+                                onChange={(value) => field.onChange(value ?? "")}
+                            />
+                        )}
+                    />
+                </Form.Item>
 
             </form>
         </Modal>

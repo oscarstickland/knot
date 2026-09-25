@@ -119,7 +119,7 @@ describe("Database Integration Test", () => {
         expect(event?.expectedAttendees).toBe(150);
     });
 
-    it("treats an empty string as no expected attendees when creating an event", async () => {
+    it.each(["", null])("treats %p as no expected attendees when creating an event", async (expectedAttendees) => {
         const app = await harness.setupApp();
         const club = await harness.setupClub("Club");
         const { cookie } = await harness.setupUser("test@test.com", "admin", club.id, "User");
@@ -131,7 +131,7 @@ describe("Database Integration Test", () => {
                 name: "Hello",
                 start: new Date(),
                 end: new Date(Date.now() + 5000),
-                expectedAttendees: ""
+                expectedAttendees
             })
         });
         expect(res.status).toBe(201);
@@ -171,7 +171,7 @@ describe("Database Integration Test", () => {
         expect(updatedEvent!.expectedAttendees).toBe(80);
     });
 
-    it("treats an empty string as clearing the expected attendees when updating an event", async () => {
+    it.each(["", null])("treats %p as clearing the expected attendees when updating an event", async (expectedAttendees) => {
         const app = await harness.setupApp();
         const club = await harness.setupClub("Club");
         const { cookie } = await harness.setupUser("test@test.com", "admin", club.id, "User");
@@ -195,7 +195,7 @@ describe("Database Integration Test", () => {
                 name: "Event",
                 start: referenceDate,
                 end: new Date(referenceDate.valueOf() + 5000),
-                expectedAttendees: ""
+                expectedAttendees
             })
         });
         expect(res.status).toBe(200);
