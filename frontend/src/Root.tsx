@@ -25,7 +25,7 @@ export function Root() {
 
     <Route path="/auth/login" element={<LoginPage />} />
 
-    <Route path="/attendance/register" element={<AttendanceForm />} />
+    <Route path="/attendance/:slug/register" element={<AttendanceForm />} />
   </Routes>
 }
 

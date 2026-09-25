@@ -1,10 +1,23 @@
 import { Hono } from "hono";
 import type { DbEnv } from "../db/connection";
 import { HTTPException } from "hono/http-exception";
-import { RegisterAttendanceSchema } from "../types/event-attendance";
+import { EventAttendanceInfoSchema, RegisterAttendanceSchema } from "../types/event-attendance";
 import { eventAttendanceTable } from "../db/schema";
 
 const eventAttendanceApp = new Hono<DbEnv>();
+
+eventAttendanceApp.get("/:slug/info", async (c) => {
+    const db = c.get("db");
+    const slug = c.req.param("slug");
+
+    const event = await db.query.eventsTable.findFirst({
+        where: { slug },
+        columns: { slug: true, name: true, start: true, end: true }
+    });
+    if (!event) throw new HTTPException(404, { message: "Event not found" });
+
+    return c.json(EventAttendanceInfoSchema.parse(event));
+});
 
 eventAttendanceApp.post("/:slug/register", async (c) => {
     const db = c.get("db");

@@ -21,73 +21,106 @@ describe("Database Integration Test", () => {
         await harness.rollbackTransaction();
     });
 
-    it("returns 404 when registering attendance for an event that does not exist", async () => {
-        const app = await harness.setupApp();
+    describe("GET /:slug/info", () => {
+        it("returns 404 when fetching info for an event that does not exist", async () => {
+            const app = await harness.setupApp();
 
-        const res = await app.request("/api/attendance/non-existent-slug/register", {
-            method: "POST",
-            body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
+            const res = await app.request("/api/attendance/non-existent-slug/info");
+            expect(res.status).toBe(404);
         });
-        expect(res.status).toBe(404);
+
+        it("returns the slug, name and dates for an event's info", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const referenceDate = new Date();
+
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id })
+                .returning();
+
+            const res = await app.request(`/api/attendance/${event!.slug}/info`);
+            expect(res.status).toBe(200);
+
+            const body = await res.json();
+            expect(body).toEqual({
+                slug: event!.slug,
+                name: "Event",
+                start: referenceDate.toISOString(),
+                end: new Date(referenceDate.valueOf() + 5000).toISOString()
+            });
+        });
     });
 
-    it("returns 403 when registering attendance for an event with attendance closed", async () => {
-        const app = await harness.setupApp();
-        const club = await harness.setupClub("Club");
+    describe("POST /:slug/register", () => {
+        it("returns 404 when registering attendance for an event that does not exist", async () => {
+            const app = await harness.setupApp();
 
-        const [event] = await harness.db
-            .insert(eventsTable)
-            .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: false })
-            .returning();
-
-        const res = await app.request(`/api/attendance/${event!.slug}/register`, {
-            method: "POST",
-            body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
+            const res = await app.request("/api/attendance/non-existent-slug/register", {
+                method: "POST",
+                body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
+            });
+            expect(res.status).toBe(404);
         });
-        expect(res.status).toBe(403);
-    });
 
-    it("returns 201 and registers attendance for an event with attendance open", async () => {
-        const app = await harness.setupApp();
-        const club = await harness.setupClub("Club");
+        it("returns 403 when registering attendance for an event with attendance closed", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
 
-        const [event] = await harness.db
-            .insert(eventsTable)
-            .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: true })
-            .returning();
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: false })
+                .returning();
 
-        const res = await app.request(`/api/attendance/${event!.slug}/register`, {
-            method: "POST",
-            body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
+            const res = await app.request(`/api/attendance/${event!.slug}/register`, {
+                method: "POST",
+                body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
+            });
+            expect(res.status).toBe(403);
         });
-        expect(res.status).toBe(201);
 
-        const attendance = await harness.db.query.eventAttendanceTable.findFirst({
-            where: { eventId: event!.id, email: "attendee@test.com" }
+        it("returns 201 and registers attendance for an event with attendance open", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: true })
+                .returning();
+
+            const res = await app.request(`/api/attendance/${event!.slug}/register`, {
+                method: "POST",
+                body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
+            });
+            expect(res.status).toBe(201);
+
+            const attendance = await harness.db.query.eventAttendanceTable.findFirst({
+                where: { eventId: event!.id, email: "attendee@test.com" }
+            });
+            expect(attendance).not.toBeUndefined();
+            expect(attendance!.name).toEqual("Attendee");
         });
-        expect(attendance).not.toBeUndefined();
-        expect(attendance!.name).toEqual("Attendee");
-    });
 
-    it("returns 409 when registering attendance twice with the same email for an event", async () => {
-        const app = await harness.setupApp();
-        const club = await harness.setupClub("Club");
+        it("returns 409 when registering attendance twice with the same email for an event", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
 
-        const [event] = await harness.db
-            .insert(eventsTable)
-            .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: true })
-            .returning();
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: true })
+                .returning();
 
-        const firstRes = await app.request(`/api/attendance/${event!.slug}/register`, {
-            method: "POST",
-            body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
+            const firstRes = await app.request(`/api/attendance/${event!.slug}/register`, {
+                method: "POST",
+                body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
+            });
+            expect(firstRes.status).toBe(201);
+
+            const secondRes = await app.request(`/api/attendance/${event!.slug}/register`, {
+                method: "POST",
+                body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
+            });
+            expect(secondRes.status).toBe(409);
         });
-        expect(firstRes.status).toBe(201);
-
-        const secondRes = await app.request(`/api/attendance/${event!.slug}/register`, {
-            method: "POST",
-            body: JSON.stringify({ name: "Attendee", email: "attendee@test.com" })
-        });
-        expect(secondRes.status).toBe(409);
     });
 });
