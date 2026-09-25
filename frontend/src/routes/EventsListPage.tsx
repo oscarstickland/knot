@@ -70,6 +70,7 @@ interface EventsTable {
     end: Date;
     location: string;
     event: ClubEvent;
+}
 
 function formatEventDate(start: Date, end: Date) {
     const startDate = dayjs(start);
