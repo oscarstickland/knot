@@ -7,7 +7,7 @@ import { DashboardPage } from "./routes/DashboardPage";
 import { LoginPage } from "./routes/login/LoginPage";
 import {EventsListPage} from "@/routes/EventsListPage.tsx";
 import {BudgetOverviewPage} from "@/routes/BudgetOverviewPage.tsx";
-import {EventPage} from "@/routes/EventPage.tsx";
+import {EventPage} from "@/routes/EventPage/EventPage";
 import {AdminPage} from "@/routes/AdminPage.tsx";
 
 export function Root() {
