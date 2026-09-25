@@ -1,10 +1,6 @@
 import {type ClubEvent, type UpdateEventData, UpdateEventSchema} from "@knot/backend/events";
 import {useState} from "react";
-<<<<<<< HEAD
 import {Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, notification, theme} from "antd";
-=======
-import {Button, DatePicker, Modal, Form, Input, theme, notification, Drawer} from "antd";
->>>>>>> 57d91da (feat(events): add ability to update expected attendance on the frontend)
 import {Controller, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {AxiosInstance} from "@/lib/fetcher.tsx";
