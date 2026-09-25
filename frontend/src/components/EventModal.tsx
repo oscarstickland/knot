@@ -1,6 +1,6 @@
 import {type ClubEvent, type UpdateEventData, UpdateEventSchema} from "@knot/backend/events";
 import {useState} from "react";
-import {Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, notification} from "antd";
+import {Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, notification, theme} from "antd";
 import {Controller, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {AxiosInstance} from "@/lib/fetcher.tsx";
@@ -20,7 +20,9 @@ type EventFormModalProps =
 export function EventModal({ mode, event }: EventFormModalProps) {
     const [ open, setOpen ] = useState(false);
     const [ api, contextHolder ] = useAppNotification();
+    const { token } = theme.useToken();
     const isEditMode = mode === "update";
+    const labelStyle = { fontWeight: token.fontWeightStrong };
 
     const { handleSubmit, formState: { errors }, control, reset } = useForm<UpdateEventInput, any, UpdateEventOutput>({
         resolver: zodResolver(UpdateEventSchema),
@@ -83,6 +85,9 @@ export function EventModal({ mode, event }: EventFormModalProps) {
         >
             <form onSubmit={handleSubmit(submit)}>
                 <Form.Item
+                    label={<span style={labelStyle}>Event Name</span>}
+                    layout="vertical"
+                    colon={false}
                     validateStatus={errors.name ? "error" : ""}
                     help={errors.name?.message}
                 >
@@ -93,43 +98,49 @@ export function EventModal({ mode, event }: EventFormModalProps) {
                     />
                 </Form.Item>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Form.Item
-                        validateStatus={errors.start ? "error" : ""}
-                        help={errors.start?.message}
-                    >
-                        <Controller
-                            name="start"
-                            control={control}
-                            render={({ field }) => (
-                                <DatePicker
-                                    showTime
-                                    value={field.value ? dayjs(field.value) : null}
-                                    format={"DD/MM/YYYY h:mm A"}
-                                    onChange={(date) => field.onChange(date ? date.toISOString() : null)}
-                                />
-                            )}
-                        />
-                    </Form.Item>
+                <Form.Item
+                    label={<span style={labelStyle}>Start</span>}
+                    layout="vertical"
+                    colon={false}
+                    validateStatus={errors.start ? "error" : ""}
+                    help={errors.start?.message}
+                >
+                    <Controller
+                        name="start"
+                        control={control}
+                        render={({ field }) => (
+                            <DatePicker
+                                showTime
+                                style={{ width: "100%" }}
+                                value={field.value ? dayjs(field.value) : null}
+                                format={"D MMM YYYY h:mm A"}
+                                onChange={(date) => field.onChange(date ? date.toISOString() : null)}
+                            />
+                        )}
+                    />
+                </Form.Item>
 
-                    <Form.Item
-                        validateStatus={errors.end ? "error" : ""}
-                        help={errors.end?.message}
-                    >
-                        <Controller
-                            name="end"
-                            control={control}
-                            render={({ field }) => (
-                                <DatePicker
-                                    showTime
-                                    value={field.value ? dayjs(field.value) : null}
-                                    format={"DD/MM/YYYY h:mm A"}
-                                    onChange={(date) => field.onChange(date ? date.toISOString() : null)}
-                                />
-                            )}
-                        />
-                    </Form.Item>
-                </div>
+                <Form.Item
+                    label={<span style={labelStyle}>End</span>}
+                    layout="vertical"
+                    colon={false}
+                    validateStatus={errors.end ? "error" : ""}
+                    help={errors.end?.message}
+                >
+                    <Controller
+                        name="end"
+                        control={control}
+                        render={({ field }) => (
+                            <DatePicker
+                                showTime
+                                style={{ width: "100%" }}
+                                value={field.value ? dayjs(field.value) : null}
+                                format={"D MMM YYYY h:mm A"}
+                                onChange={(date) => field.onChange(date ? date.toISOString() : null)}
+                            />
+                        )}
+                    />
+                </Form.Item>
 
                 <Form.Item
                     validateStatus={errors.expectedAttendees ? "error" : ""}
