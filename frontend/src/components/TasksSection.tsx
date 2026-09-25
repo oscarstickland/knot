@@ -32,6 +32,8 @@ import { TaskModal } from "@/components/TaskModal.tsx";
 import dayjs from "dayjs";
 import { EditOutlined, LinkOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
 import { progressColor, progressLabel } from "@/components/TaskStatusPill.tsx";
+import { useAppNotification } from "@/lib/useAppNotification";
+import useApp from "antd/es/app/useApp";
 
 const { Text } = Typography;
 
@@ -58,14 +60,13 @@ export function TasksSection(props: { eventId: number }) {
         return <Result status="error" title="Retrieval Error" subTitle="Unable to fetch tasks." />
     }
 
-    return <div style={{ marginTop: "32px" }}>
+    return <div>
         <div style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            justifyContent: 'flex-end',
             paddingBottom: "16px"
         }}>
-            <Text strong style={{ fontSize: "16px" }}>Tasks</Text>
             { isTaskManager ? <TaskModal mode="create" eventId={props.eventId} /> : "" }
         </div>
 
@@ -150,7 +151,7 @@ export function TasksSection(props: { eventId: number }) {
 
 function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
     const user = useUser();
-    const [api, contextHolder] = notification.useNotification();
+    const [api, contextHolder] = useAppNotification();
     const isAssigned = props.task.assignments.some((assignment) => assignment.userId === user.id);
     const canEdit = props.isTaskManager || isAssigned;
 
@@ -225,7 +226,7 @@ const AddDocumentFormSchema = AddTaskDocumentSchema;
 type AddDocumentFormData = z.infer<typeof AddDocumentFormSchema>;
 
 function AddDocumentForm(props: { taskId: number; eventId: number }) {
-    const [api, contextHolder] = notification.useNotification();
+    const [api, contextHolder] = useAppNotification();
     const { handleSubmit, formState: { errors }, control, reset } = useForm<AddDocumentFormData>({
         resolver: zodResolver(AddDocumentFormSchema),
         defaultValues: { url: "" }

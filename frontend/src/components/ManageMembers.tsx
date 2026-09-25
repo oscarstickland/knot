@@ -18,6 +18,7 @@ import type { ClubMember } from "@knot/backend/user";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
 import { EditMemberModal } from "@/components/EditMemberModal.tsx";
 import { CreateMemberModal } from "@/components/CreateMemberModal.tsx";
+import { useAppNotification } from "@/lib/useAppNotification";
 
 const { Text } = Typography;
 
@@ -64,7 +65,7 @@ function MembersTable() {
     const [selectedMember, setSelectedMember] = useState<ClubMember | null>(null);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [searchText, setSearchText] = useState("");
-    const [api, contextHolder] = notification.useNotification();
+    const [api, contextHolder] = useAppNotification();
 
     const filteredData = useMemo(() => {
         const query = searchText.trim().toLowerCase();
