@@ -14,11 +14,14 @@ type UpdateEventInput = z.input<typeof UpdateEventSchema>;
 type UpdateEventOutput = z.output<typeof UpdateEventSchema>;
 
 type EventFormModalProps =
-    | { mode: "create"; event?: never }
-    | { mode: "update"; event: ClubEvent };
+    | { mode: "create"; event?: never; open?: boolean; onOpenChange?: (open: boolean) => void }
+    | { mode: "update"; event: ClubEvent; open?: boolean; onOpenChange?: (open: boolean) => void };
 
-export function EventModal({ mode, event }: EventFormModalProps) {
-    const [ open, setOpen ] = useState(false);
+export function EventModal({ mode, event, open: openProp, onOpenChange }: EventFormModalProps) {
+    const isControlled = openProp !== undefined;
+    const [ internalOpen, setInternalOpen ] = useState(false);
+    const open = isControlled ? openProp : internalOpen;
+    const setOpen = (value: boolean) => isControlled ? onOpenChange?.(value) : setInternalOpen(value);
     const [ api, contextHolder ] = useAppNotification();
     const { token } = theme.useToken();
     const isEditMode = mode === "update";
@@ -52,7 +55,7 @@ export function EventModal({ mode, event }: EventFormModalProps) {
                 if (isEditMode) {
                     await mutate(`/events/${event.id}`);
                 }
-                await mutate("/events");
+                await mutate((key) => typeof key === "string" && key.startsWith("/events"));
                 setOpen(false);
 
                 if (!isEditMode) reset();
@@ -178,9 +181,11 @@ export function EventModal({ mode, event }: EventFormModalProps) {
                 </Form.Item>
             </form>
         </Drawer>
-        <Button
-            onClick={() => setOpen(!open)}
-            icon={isEditMode ? <EditOutlined /> : <PlusOutlined />}
-        >{isEditMode ? "Edit Event" : "New Event"}</Button>
+        { !isControlled &&
+            <Button
+                onClick={() => setOpen(!open)}
+                icon={isEditMode ? <EditOutlined /> : <PlusOutlined />}
+            >{isEditMode ? "Edit Event" : "New Event"}</Button>
+        }
     </>
 }
