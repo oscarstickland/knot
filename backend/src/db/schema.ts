@@ -34,6 +34,7 @@ export const eventsTable = pgTable("events", {
     slug: varchar({ length: 36 }).notNull().unique().$defaultFn(() => crypto.randomUUID()),
     start: timestamp("start_time", { mode: "date", withTimezone: true }).notNull(),
     end: timestamp("end_time", { mode: "date", withTimezone: true }).notNull(),
+    location: varchar({ length: 255 }).notNull(),
     clubId: integer("club_id").notNull(),
     archived: boolean("archived").default(false).notNull(),
     attendanceOpen: boolean("attendance_open").default(false).notNull(),
