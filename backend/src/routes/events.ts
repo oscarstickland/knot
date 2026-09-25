@@ -14,14 +14,17 @@ eventsApp.use("*", isAuthenticated);
 eventsApp.get("/", async (c) => {
     const user = c.var.user;
     const db = c.get('db');
-    const showArchived = c.req.query("archived") === "true";
+    const isEventManager = user.role === "admin" || user.role === "exec";
+    const archivedParam = c.req.query("archived");
 
-    if (showArchived && user.role !== "admin" && user.role !== "exec") {
+    if (archivedParam !== "false" && !isEventManager) {
         throw new HTTPException(403);
     }
 
     const events = await db.query.eventsTable.findMany({
-        where: { clubId: user.club.id, archived: showArchived }
+        where: archivedParam === "all"
+            ? { clubId: user.club.id }
+            : { clubId: user.club.id, archived: archivedParam === "true" }
     });
 
     return c.json(events);
