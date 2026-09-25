@@ -131,7 +131,9 @@ function EventsTable(props: { filter: "all" | "active" | "archived"; search: str
     const search = props.search.trim().toLowerCase();
     const tableData: EventsTable[] = data
         ? data
-            .filter((row) => !search || row.name.toLowerCase().includes(search))
+            .filter((row) => !search
+                || row.name.toLowerCase().includes(search)
+                || row.location.toLowerCase().includes(search))
             .map((row) => ({
                 key: row.id,
                 name: row.name,
