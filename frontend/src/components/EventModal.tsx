@@ -137,7 +137,7 @@ export function EventModal({ mode, event }: EventFormModalProps) {
                                 style={{ width: "100%" }}
                                 min={1}
                                 placeholder="Expected attendees (optional)"
-                                value={field.value === "" || field.value === undefined ? null : field.value}
+                                value={typeof field.value === "number" ? field.value : null}
                                 onChange={(value) => field.onChange(value ?? "")}
                             />
                         )}
