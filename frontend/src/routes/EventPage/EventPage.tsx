@@ -15,6 +15,7 @@ import { TasksTab } from "./TasksTab";
 import { BudgetTab } from "./BudgetTab";
 import { AttendanceTab } from "./AttendanceTab";
 import { DocumentsTab } from "./DocumentsTab";
+import { useAppNotification } from "@/lib/useAppNotification";
 
 const { Text, Title } = Typography;
 dayjs.extend(relativeTime);
@@ -41,7 +42,7 @@ export function EventPage() {
 function EventInformation(props: { id: string }) {
     const { token } = theme.useToken();
     const user = useUser();
-    const [api, contextHolder] = notification.useNotification();
+    const [api, contextHolder] = useAppNotification();
     const { data, error, isLoading } = useSWR<ClubEvent, AxiosError>(props.id ? `/events/${props.id}` : null);
 
     if (isLoading) return <Spin />
