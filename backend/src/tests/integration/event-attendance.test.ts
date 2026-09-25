@@ -52,6 +52,7 @@ describe("Database Integration Test", () => {
                 .insert(eventsTable)
                 .values({
                     name: "Event",
+                    location: "Main Hall",
                     start: referenceDate,
                     end: new Date(referenceDate.valueOf() + 5000),
                     clubId: club.id,
@@ -90,7 +91,7 @@ describe("Database Integration Test", () => {
 
             const [event] = await harness.db
                 .insert(eventsTable)
-                .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: false })
+                .values({ name: "Event", location: "Main Hall", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: false })
                 .returning();
 
             const res = await app.request(`/api/attendance/${event!.slug}/register`, {
@@ -106,7 +107,7 @@ describe("Database Integration Test", () => {
 
             const [event] = await harness.db
                 .insert(eventsTable)
-                .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: true })
+                .values({ name: "Event", location: "Main Hall", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: true })
                 .returning();
 
             const res = await app.request(`/api/attendance/${event!.slug}/register`, {
@@ -128,7 +129,7 @@ describe("Database Integration Test", () => {
 
             const [event] = await harness.db
                 .insert(eventsTable)
-                .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: true })
+                .values({ name: "Event", location: "Main Hall", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id, attendanceOpen: true })
                 .returning();
 
             const firstRes = await app.request(`/api/attendance/${event!.slug}/register`, {
@@ -164,7 +165,7 @@ describe("Database Integration Test", () => {
 
             const [event] = await harness.db
                 .insert(eventsTable)
-                .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id })
+                .values({ name: "Event", location: "Main Hall", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id })
                 .returning();
 
             const checkIns = await insertCheckIns(harness.db, event!.id, checkInCount);
@@ -204,7 +205,7 @@ describe("Database Integration Test", () => {
 
             const [event] = await harness.db
                 .insert(eventsTable)
-                .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id })
+                .values({ name: "Event", location: "Main Hall", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id })
                 .returning();
 
             const checkIns = await insertCheckIns(harness.db, event!.id, checkInCount);
@@ -231,7 +232,7 @@ describe("Database Integration Test", () => {
 
             const [event] = await harness.db
                 .insert(eventsTable)
-                .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id })
+                .values({ name: "Event", location: "Main Hall", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id })
                 .returning();
 
             const now = Date.now();

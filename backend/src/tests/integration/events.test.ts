@@ -31,6 +31,7 @@ describe("Database Integration Test", () => {
             headers: { cookie },
             body: JSON.stringify({
                 name: "Hello",
+                location: "Main Hall",
                 start: new Date(),
                 end: new Date(Date.now() + 5000),
             })
@@ -48,6 +49,7 @@ describe("Database Integration Test", () => {
             headers: { cookie },
             body: JSON.stringify({
                 name: "Hello",
+                location: "Main Hall",
                 start: new Date(),
                 end: new Date(Date.now() + 5000),
             })
@@ -59,6 +61,7 @@ describe("Database Integration Test", () => {
             where: { name: "Hello", clubId: club.id }
         });
         expect(event).not.toBeUndefined();
+        expect(event?.location).toBe("Main Hall");
     });
 
     it.each(["admin", "exec"])("allows %s to edit an event", async (role) => {
@@ -71,7 +74,7 @@ describe("Database Integration Test", () => {
         // insert an event
         const event = await harness.db
             .insert(eventsTable)
-            .values({ name: "Event", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id })
+            .values({ name: "Event", location: "Old Location", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id })
             .returning();
 
         // now - update all fields of the event
@@ -80,6 +83,7 @@ describe("Database Integration Test", () => {
             headers: { cookie },
             body: JSON.stringify({
                 name: "Event1",
+                location: "New Location",
                 start: new Date(referenceDate.valueOf() + 6000),
                 end: new Date(referenceDate.valueOf() + 7000),
             })
@@ -92,6 +96,7 @@ describe("Database Integration Test", () => {
         });
         expect(updatedEvent).not.toBeUndefined();
         expect(updatedEvent!.name).toEqual("Event1");
+        expect(updatedEvent!.location).toEqual("New Location");
         expect(updatedEvent!.start).toEqual(new Date(referenceDate.valueOf() + 6000));
         expect(updatedEvent!.end).toEqual(new Date(referenceDate.valueOf() + 7000));
     });
@@ -106,6 +111,7 @@ describe("Database Integration Test", () => {
             headers: { cookie },
             body: JSON.stringify({
                 name: "Hello",
+                location: "Main Hall",
                 start: new Date(),
                 end: new Date(Date.now() + 5000),
                 expectedAttendees: 150
@@ -129,6 +135,7 @@ describe("Database Integration Test", () => {
             headers: { cookie },
             body: JSON.stringify({
                 name: "Hello",
+                location: "Main Hall",
                 start: new Date(),
                 end: new Date(Date.now() + 5000),
                 expectedAttendees
@@ -150,7 +157,7 @@ describe("Database Integration Test", () => {
 
         const [event] = await harness.db
             .insert(eventsTable)
-            .values({ name: "Event", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id })
+            .values({ name: "Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id })
             .returning();
 
         const res = await app.request(`/api/events/${event!.id}`, {
@@ -158,6 +165,7 @@ describe("Database Integration Test", () => {
             headers: { cookie },
             body: JSON.stringify({
                 name: "Event",
+                location: "Main Hall",
                 start: referenceDate,
                 end: new Date(referenceDate.valueOf() + 5000),
                 expectedAttendees: 80
@@ -181,6 +189,7 @@ describe("Database Integration Test", () => {
             .insert(eventsTable)
             .values({
                 name: "Event",
+                location: "Main Hall",
                 start: referenceDate,
                 end: new Date(referenceDate.valueOf() + 5000),
                 clubId: club.id,
@@ -193,6 +202,7 @@ describe("Database Integration Test", () => {
             headers: { cookie },
             body: JSON.stringify({
                 name: "Event",
+                location: "Main Hall",
                 start: referenceDate,
                 end: new Date(referenceDate.valueOf() + 5000),
                 expectedAttendees
@@ -214,7 +224,7 @@ describe("Database Integration Test", () => {
         // insert an event
         const event = await harness.db
             .insert(eventsTable)
-            .values({ name: "Event", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id })
+            .values({ name: "Event", location: "Main Hall", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id })
             .returning();
 
         // now - update all fields of the event
@@ -223,6 +233,7 @@ describe("Database Integration Test", () => {
             headers: { cookie },
             body: JSON.stringify({
                 name: "Event1",
+                location: "Main Hall",
                 start: new Date(Date.now() + 1000),
                 end: new Date(Date.now() + 6000),
             })
@@ -242,11 +253,30 @@ describe("Database Integration Test", () => {
             headers: { cookie },
             body: JSON.stringify({
                 name: "Hello",
+                location: "Main Hall",
                 start: referenceDate,
                 end: new Date(referenceDate.getTime() - 1),
             })
         });
         expect(res.status).toBe(400); // verify endpoint
+    });
+
+    it("prevents users from creating event without a location", async () => {
+        const app = await harness.setupApp();
+        const club = await harness.setupClub("Club");
+        const { cookie } = await harness.setupUser("test@test.com", "admin", club.id, "User");
+
+        const res = await app.request("/api/events", {
+            method: "POST",
+            headers: { cookie },
+            body: JSON.stringify({
+                name: "Hello",
+                location: "",
+                start: new Date(),
+                end: new Date(Date.now() + 5000),
+            })
+        });
+        expect(res.status).toBe(400);
     });
 
     it("prevents users from updating event with end before start", async () => {
@@ -258,7 +288,7 @@ describe("Database Integration Test", () => {
         // insert an event
         const event = await harness.db
             .insert(eventsTable)
-            .values({ name: "Event", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id })
+            .values({ name: "Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id })
             .returning();
 
         // now - attempt to put end date before start date
@@ -267,6 +297,7 @@ describe("Database Integration Test", () => {
             headers: { cookie },
             body: JSON.stringify({
                 name: "Event1",
+                location: "Main Hall",
                 start: new Date(referenceDate.valueOf() + 5000),
                 end: referenceDate,
             })
@@ -285,7 +316,7 @@ describe("Database Integration Test", () => {
         // create event with user 1
         const event = await harness.db
             .insert(eventsTable)
-            .values({ name: "Event", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club1.id })
+            .values({ name: "Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club1.id })
             .returning();
 
         // now - attempt to access it from user 2
