@@ -28,10 +28,11 @@ export function EventModal({ mode, event }: EventFormModalProps) {
         resolver: zodResolver(UpdateEventSchema),
         defaultValues: isEditMode ? {
             name: event.name,
+            location: event.location,
             start: event.start ? new Date(event.start).toISOString() : undefined,
             end: event.end ? new Date(event.end).toISOString() : undefined,
             expectedAttendees: event.expectedAttendees ?? "",
-        } : { name: "", start: undefined, end: undefined, expectedAttendees: "" },
+        } : { name: "", location: "", start: undefined, end: undefined, expectedAttendees: "" },
     });
 
     const handleCancel = () => {
@@ -95,6 +96,20 @@ export function EventModal({ mode, event }: EventFormModalProps) {
                         name="name"
                         control={control}
                         render={({ field }) => <Input {...field} placeholder="Name"/>}
+                    />
+                </Form.Item>
+
+                <Form.Item
+                    label={<span style={labelStyle}>Location</span>}
+                    layout="vertical"
+                    colon={false}
+                    validateStatus={errors.location ? "error" : ""}
+                    help={errors.location?.message}
+                >
+                    <Controller
+                        name="location"
+                        control={control}
+                        render={({ field }) => <Input {...field} placeholder="Location"/>}
                     />
                 </Form.Item>
 

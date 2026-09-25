@@ -3,6 +3,7 @@ import { z } from "zod";
 
 const ClubEventSchema = z.object({
     name: z.string().min(1, "Event name cannot be empty"),
+    location: z.string().min(1, "Location cannot be empty").max(255, "Location must be at most 255 characters"),
     start: z.string().datetime({ offset: true }).pipe(z.coerce.date()),
     end: z.string().datetime({ offset: true }).pipe(z.coerce.date()),
     expectedAttendees: z.union([z.literal(""), z.null(), z.coerce.number().int().positive()])
