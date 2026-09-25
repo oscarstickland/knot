@@ -1,8 +1,12 @@
 import { useRef } from "react";
-import { Button, Card, Col, notification, Row, theme, Typography } from "antd";
+import { Button, Card, Col, notification, Row, Statistic, theme, Typography } from "antd";
 import { CopyOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { ClubEvent } from "@knot/backend/events";
+import type { AttendanceSummary } from "@knot/backend/event-attendance";
 import QRCode from "react-qr-code";
+import useSWR from "swr";
+import type { AxiosError } from "axios";
+import dayjs from "dayjs";
 
 const { Title, Text } = Typography;
 
@@ -11,6 +15,9 @@ export function AttendanceTab(props: { event: ClubEvent }) {
     const [api, contextHolder] = notification.useNotification();
     const checkInUrl = `${window.location.origin}/attendance/${props.event.slug}/register`;
     const qrContainerRef = useRef<HTMLDivElement>(null);
+
+    const { data: summary, error: summaryError, isLoading: summaryLoading } =
+        useSWR<AttendanceSummary, AxiosError>(`/attendance/${props.event.id}/summary`);
 
     const copyUrl = () => {
         navigator.clipboard.writeText(checkInUrl)
@@ -109,18 +116,32 @@ export function AttendanceTab(props: { event: ClubEvent }) {
         <div style={{ flex: "2 1 66%", display: "flex", flexDirection: "column", gap: "1.5em" }}>
             <Row gutter={16}>
                 <Col span={8}>
-                    <Card size="small">
-                        <Text type="secondary">Checked in</Text>
+                    <Card size="small" styles={{ body: { textAlign: "center" } }}>
+                        <Statistic
+                            title="Checked in"
+                            loading={summaryLoading}
+                            value={summaryError ? "—" : summary?.checkedIn ?? 0}
+                        />
                     </Card>
                 </Col>
                 <Col span={8}>
-                    <Card size="small">
+                    <Card size="small" styles={{ body: { textAlign: "center" } }}>
                         <Text type="secondary">Not checked in</Text>
                     </Card>
                 </Col>
                 <Col span={8}>
-                    <Card size="small">
-                        <Text type="secondary">Last scan</Text>
+                    <Card size="small" styles={{ body: { textAlign: "center" } }}>
+                        <Statistic
+                            title="Last scan"
+                            loading={summaryLoading}
+                            value={
+                                summaryError
+                                    ? "—"
+                                    : summary?.lastCheckIn
+                                        ? dayjs(summary.lastCheckIn).format("D MMM, h:mm A")
+                                        : "-"
+                            }
+                        />
                     </Card>
                 </Col>
             </Row>
