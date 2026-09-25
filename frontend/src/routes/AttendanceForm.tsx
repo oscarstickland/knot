@@ -1,7 +1,7 @@
 import { useParams } from "react-router";
 import useSWR from "swr";
 import type { AxiosError } from "axios";
-import { Button, Card, Form, Input, notification, Result, Spin, Typography } from "antd";
+import { Alert, Button, Card, Form, Input, notification, Result, Spin, Typography } from "antd";
 import { RegisterAttendanceSchema, type RegisterAttendanceData, type EventAttendanceInfo } from "@knot/backend/event-attendance";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -44,7 +44,16 @@ export function AttendanceForm() {
                 {dayjs(data.start).format("dddd D MMMM YYYY [at] h:mm A")}
             </Text>
 
-            <RegistrationForm slug={data.slug} />
+            {data.attendanceOpen
+                ? <RegistrationForm slug={data.slug} />
+                : <Alert
+                    style={{ marginTop: "1.5em" }}
+                    type="error"
+                    showIcon
+                    message="Attendance is not open"
+                    description="Check-in for this event hasn't opened yet. Please check back later."
+                />
+            }
         </Card>
     </CenteredPage>
 }

@@ -10,7 +10,8 @@ export const EventAttendanceInfoSchema = z.object({
     slug: z.string(),
     name: z.string(),
     start: z.coerce.date(),
-    end: z.coerce.date()
+    end: z.coerce.date(),
+    attendanceOpen: z.boolean()
 });
 
 export const AttendanceSummarySchema = z.object({

@@ -43,14 +43,20 @@ describe("Database Integration Test", () => {
             expect(res.status).toBe(404);
         });
 
-        it("returns the slug, name and dates for an event's info", async () => {
+        it.each([true, false])("returns the slug, name, dates and attendanceOpen for an event's info", async (attendanceOpen) => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const referenceDate = new Date();
 
             const [event] = await harness.db
                 .insert(eventsTable)
-                .values({ name: "Event", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id })
+                .values({
+                    name: "Event",
+                    start: referenceDate,
+                    end: new Date(referenceDate.valueOf() + 5000),
+                    clubId: club.id,
+                    attendanceOpen
+                })
                 .returning();
 
             const res = await app.request(`/api/attendance/${event!.slug}/info`);
@@ -61,7 +67,8 @@ describe("Database Integration Test", () => {
                 slug: event!.slug,
                 name: "Event",
                 start: referenceDate.toISOString(),
-                end: new Date(referenceDate.valueOf() + 5000).toISOString()
+                end: new Date(referenceDate.valueOf() + 5000).toISOString(),
+                attendanceOpen
             });
         });
     });

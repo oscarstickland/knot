@@ -19,7 +19,7 @@ eventAttendanceApp.get("/:slug/info", async (c) => {
 
     const event = await db.query.eventsTable.findFirst({
         where: { slug },
-        columns: { slug: true, name: true, start: true, end: true }
+        columns: { slug: true, name: true, start: true, end: true, attendanceOpen: true }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
