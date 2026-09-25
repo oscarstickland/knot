@@ -1,5 +1,5 @@
 import { defineRelations } from "drizzle-orm";
-import {boolean, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, varchar} from "drizzle-orm/pg-core";
+import {boolean, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, unique, varchar} from "drizzle-orm/pg-core";
 
 export const userRoles = ["standard", "exec", "admin"] as const;
 export type UserRole = (typeof userRoles)[number];
@@ -31,10 +31,13 @@ export const usersTable = pgTable("users", {
 export const eventsTable = pgTable("events", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     name: varchar({ length: 255 }).notNull(),
+    slug: varchar({ length: 36 }).notNull().unique().$defaultFn(() => crypto.randomUUID()),
     start: timestamp("start_time", { mode: "date", withTimezone: true }).notNull(),
     end: timestamp("end_time", { mode: "date", withTimezone: true }).notNull(),
     clubId: integer("club_id").notNull(),
     archived: boolean("archived").default(false).notNull(),
+    attendanceOpen: boolean("attendance_open").default(false).notNull(),
+    expectedAttendees: integer("expected_attendees"),
 });
 
 export const tasksTable = pgTable("tasks", {
@@ -81,6 +84,16 @@ export const taskAuditLogTable = pgTable("task_audit_log", {
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
 });
 
+export const eventAttendanceTable = pgTable("event_attendance", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    eventId: integer("event_id").notNull(),
+    name: varchar({ length: 250 }).notNull(),
+    email: varchar({ length: 255 }).notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull()
+}, (table) => [
+    unique().on(table.eventId, table.email)
+])
+
 export const relations = defineRelations({
     clubsTable,
     usersTable,
@@ -89,7 +102,8 @@ export const relations = defineRelations({
     taskAssignmentsTable,
     taskDependenciesTable,
     taskDocumentsTable,
-    taskAuditLogTable
+    taskAuditLogTable,
+    eventAttendanceTable
 }, (r) => ({
     usersTable: {
         club: r.one.clubsTable({
@@ -101,7 +115,8 @@ export const relations = defineRelations({
         club: r.one.clubsTable({
             from: r.eventsTable.clubId,
             to: r.clubsTable.id
-        })
+        }),
+        attendance: r.many.eventAttendanceTable()
     },
     clubsTable: {
         users: r.many.usersTable(),
@@ -166,6 +181,12 @@ export const relations = defineRelations({
         changedByUser: r.one.usersTable({
             from: r.taskAuditLogTable.changedBy,
             to: r.usersTable.id
+        })
+    },
+    eventAttendanceTable: {
+        event: r.one.eventsTable({
+            from: r.eventAttendanceTable.eventId,
+            to: r.eventsTable.id
         })
     }
 }));

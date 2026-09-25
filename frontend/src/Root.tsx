@@ -9,6 +9,7 @@ import {EventsListPage} from "@/routes/EventsListPage.tsx";
 import {BudgetOverviewPage} from "@/routes/BudgetOverviewPage.tsx";
 import {EventPage} from "@/routes/EventPage/EventPage";
 import {AdminPage} from "@/routes/AdminPage.tsx";
+import { AttendanceForm } from "./routes/AttendanceForm";
 
 export function Root() {
   return <Routes>
@@ -23,6 +24,8 @@ export function Root() {
     </Route>
 
     <Route path="/auth/login" element={<LoginPage />} />
+
+    <Route path="/attendance/:slug/register" element={<AttendanceForm />} />
   </Routes>
 }
 

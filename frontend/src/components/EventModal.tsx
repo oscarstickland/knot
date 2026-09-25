@@ -1,6 +1,6 @@
 import {type ClubEvent, type UpdateEventData, UpdateEventSchema} from "@knot/backend/events";
 import {useState} from "react";
-import {Button, DatePicker, Drawer, Form, Input, theme} from "antd";
+import {Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, notification, theme} from "antd";
 import {Controller, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {AxiosInstance} from "@/lib/fetcher.tsx";
@@ -30,7 +30,8 @@ export function EventModal({ mode, event }: EventFormModalProps) {
             name: event.name,
             start: event.start ? new Date(event.start).toISOString() : undefined,
             end: event.end ? new Date(event.end).toISOString() : undefined,
-        } : { name: "", start: undefined, end: undefined },
+            expectedAttendees: event.expectedAttendees ?? "",
+        } : { name: "", start: undefined, end: undefined, expectedAttendees: "" },
     });
 
     const handleCancel = () => {
@@ -140,7 +141,26 @@ export function EventModal({ mode, event }: EventFormModalProps) {
                         )}
                     />
                 </Form.Item>
-
+                <Form.Item
+                    label={<span style={labelStyle}>Expected Attendees</span>}
+                    layout="vertical"
+                    validateStatus={errors.expectedAttendees ? "error" : ""}
+                    help={errors.expectedAttendees?.message}
+                >
+                    <Controller
+                        name="expectedAttendees"
+                        control={control}
+                        render={({ field }) => (
+                            <InputNumber
+                                style={{ width: "100%" }}
+                                min={1}
+                                placeholder="Expected attendees (optional)"
+                                value={typeof field.value === "number" ? field.value : null}
+                                onChange={(value) => field.onChange(value ?? "")}
+                            />
+                        )}
+                    />
+                </Form.Item>
             </form>
         </Drawer>
         <Button
