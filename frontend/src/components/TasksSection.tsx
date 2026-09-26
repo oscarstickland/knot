@@ -4,6 +4,7 @@ import {
     Empty,
     Result,
     Select,
+    Space,
     Table,
     Tag,
     Tooltip,
@@ -36,6 +37,7 @@ export function TasksSection(props: { eventId: number }) {
     const { data: tasks, isLoading, error } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${props.eventId}`);
     const { data: members } = useSWR<ClubMember[]>(isTaskManager ? "/user" : null);
     const memberById = new Map((members ?? []).map((member) => [member.id, member]));
+    const taskById = new Map((tasks ?? []).map((task) => [task.id, task]));
     const [openTaskId, setOpenTaskId] = useState<number | null>(null);
 
     if (error) {
@@ -91,6 +93,22 @@ export function TasksSection(props: { eventId: number }) {
                             <ProgressSelect task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
                         </div>
                     )
+                },
+                {
+                    key: "dependsOn",
+                    title: "Depends On",
+                    width: 160,
+                    render: (_, task) => task.dependsOn.length === 0
+                        ? <Text type="secondary">—</Text>
+                        : <Space size={[4, 4]} wrap>
+                            {task.dependsOn.map((dependency) => {
+                                const dependencyTask = taskById.get(dependency.dependsOnTaskId);
+                                const isBlocked = dependencyTask?.progress !== "completed";
+                                return <Tag key={dependency.dependsOnTaskId} color={isBlocked ? "red" : "green"}>
+                                    {dependencyTask?.title ?? `Task ${dependency.dependsOnTaskId}`}
+                                </Tag>
+                            })}
+                        </Space>
                 },
                 {
                     key: "assignees",
