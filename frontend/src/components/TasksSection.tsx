@@ -16,7 +16,7 @@ import { taskProgressStates, type TaskWithRelations } from "@knot/backend/tasks"
 import type { ClubMember } from "@knot/backend/user";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
 import { useUser } from "@/lib/auth.tsx";
-import { TaskModal } from "@/components/TaskModal.tsx";
+import { TaskDrawer } from "@/components/TaskDrawer.tsx";
 import dayjs from "dayjs";
 import { UserOutlined } from "@ant-design/icons";
 import { priorityColor, progressColor, progressLabel } from "@/components/TaskStatusPill.tsx";
@@ -49,7 +49,7 @@ export function TasksSection(props: { eventId: number }) {
             justifyContent: 'flex-end',
             paddingBottom: "16px"
         }}>
-            { isTaskManager ? <TaskModal mode="create" eventId={props.eventId} /> : "" }
+            { isTaskManager ? <TaskDrawer mode="create" eventId={props.eventId} /> : "" }
         </div>
 
         <Table
@@ -119,7 +119,7 @@ export function TasksSection(props: { eventId: number }) {
         />
 
         {(tasks ?? []).map((task) => (
-            <TaskModal
+            <TaskDrawer
                 key={task.id}
                 mode="update"
                 eventId={props.eventId}

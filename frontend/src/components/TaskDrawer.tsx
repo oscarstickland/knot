@@ -28,7 +28,7 @@ const priorityOptions = taskPriorities.map((priority) => ({
 type TaskFormInput = z.input<typeof CreateTaskSchema>;
 type TaskFormOutput = z.output<typeof CreateTaskSchema>;
 
-type TaskModalProps =
+type TaskDrawerProps =
     | { mode: "create"; eventId: number; task?: never; open?: boolean; onOpenChange?: (open: boolean) => void }
     | {
         mode: "update";
@@ -40,7 +40,7 @@ type TaskModalProps =
         onOpenChange?: (open: boolean) => void;
     };
 
-export function TaskModal(props: TaskModalProps) {
+export function TaskDrawer(props: TaskDrawerProps) {
     const { mode, eventId } = props;
     const isEditMode = mode === "update";
     const task = isEditMode ? props.task : undefined;
