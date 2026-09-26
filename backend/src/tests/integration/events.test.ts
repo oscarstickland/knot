@@ -305,6 +305,142 @@ describe("Database Integration Test", () => {
         expect(res.status).toBe(400);
     });
 
+    describe("GET / route (listing events)", () => {
+        async function seedEvents(harness: TestDatabaseHarness, clubId: number) {
+            const referenceDate = new Date();
+            const [active] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Active Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId, archived: false })
+                .returning();
+            const [archived] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Archived Event", location: "Old Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId, archived: true })
+                .returning();
+            return { active: active!, archived: archived! };
+        }
+
+        it.each(["standard", "admin", "exec"])("allows %s to list active events with archived=false", async (role) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+            const { active } = await seedEvents(harness, club.id);
+
+            const res = await app.request("/api/events?archived=false", {
+                method: "GET",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as { id: number }[];
+            expect(body.map((event) => event.id)).toEqual([active.id]);
+        });
+
+        it("prevents standard users from listing archived events", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+            await seedEvents(harness, club.id);
+
+            const res = await app.request("/api/events?archived=true", {
+                method: "GET",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(403);
+        });
+
+        it.each(["admin", "exec"])("allows %s to list only archived events with archived=true", async (role) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+            const { archived } = await seedEvents(harness, club.id);
+
+            const res = await app.request("/api/events?archived=true", {
+                method: "GET",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as { id: number }[];
+            expect(body.map((event) => event.id)).toEqual([archived.id]);
+        });
+
+        it("prevents standard users from listing all events with archived=all", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+            await seedEvents(harness, club.id);
+
+            const res = await app.request("/api/events?archived=all", {
+                method: "GET",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(403);
+        });
+
+        it("prevents standard users from listing events with no archived param given", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+            await seedEvents(harness, club.id);
+
+            const res = await app.request("/api/events", {
+                method: "GET",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(403);
+        });
+
+        it.each(["admin", "exec"])("allows %s to list both active and archived events with archived=all", async (role) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+            const { active, archived } = await seedEvents(harness, club.id);
+
+            const res = await app.request("/api/events?archived=all", {
+                method: "GET",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as { id: number }[];
+            expect(body.map((event) => event.id).sort()).toEqual([active.id, archived.id].sort());
+        });
+
+        it.each(["admin", "exec"])("allows %s to list both active and archived events when no archived param is given", async (role) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+            const { active, archived } = await seedEvents(harness, club.id);
+
+            const res = await app.request("/api/events", {
+                method: "GET",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as { id: number }[];
+            expect(body.map((event) => event.id).sort()).toEqual([active.id, archived.id].sort());
+        });
+
+        it("only returns events belonging to the requesting user's club", async () => {
+            const app = await harness.setupApp();
+            const club1 = await harness.setupClub("Club1");
+            const club2 = await harness.setupClub("Club2");
+            const { cookie } = await harness.setupUser("test@test.com", "admin", club1.id, "User");
+            const club1Events = await seedEvents(harness, club1.id);
+            await seedEvents(harness, club2.id);
+
+            const res = await app.request("/api/events?archived=all", {
+                method: "GET",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as { id: number }[];
+            expect(body.map((event) => event.id).sort()).toEqual([club1Events.active.id, club1Events.archived.id].sort());
+        });
+    });
+
     it("prevent users from one club accessing another clubs event", async () => {
         const app = await harness.setupApp();
         const club1 = await harness.setupClub("Club1");
