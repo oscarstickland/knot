@@ -85,8 +85,11 @@ export function TaskDrawer(props: TaskDrawerProps) {
     });
 
     useEffect(() => {
-        if (open) setView(isEditMode ? "summary" : "form");
-    }, [open, isEditMode]);
+        if (open) {
+            setView(isEditMode ? "summary" : "form");
+            reset(defaultValues);
+        }
+    }, [open]);
 
     const handleClose = () => {
         setOpen(false);
@@ -206,6 +209,7 @@ export function TaskDrawer(props: TaskDrawerProps) {
                                 <Select
                                     {...field}
                                     mode="multiple"
+                                    showSearch={{ optionFilterProp: "label" }}
                                     placeholder="Assign club members"
                                     options={(members ?? []).map((member) => ({ label: member.name, value: member.id }))}
                                 />
@@ -221,6 +225,7 @@ export function TaskDrawer(props: TaskDrawerProps) {
                                 <Select
                                     {...field}
                                     mode="multiple"
+                                    showSearch={{ optionFilterProp: "label" }}
                                     placeholder="Select blocking tasks"
                                     options={dependencyOptions}
                                 />
