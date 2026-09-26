@@ -1,47 +1,28 @@
 import { useState } from "react";
 import {
     Avatar,
-    Button,
     Empty,
-    Form,
-    Input,
     Result,
     Select,
-    Space,
     Table,
     Tag,
     Tooltip,
     Typography,
-    notification,
     theme,
     type TableProps
 } from "antd";
 import useSWR, { mutate } from "swr";
-import { Controller, useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import {
-    AddTaskDocumentSchema,
-    taskProgressStates,
-    type TaskWithRelations
-} from "@knot/backend/tasks";
+import { taskProgressStates, type TaskWithRelations } from "@knot/backend/tasks";
 import type { ClubMember } from "@knot/backend/user";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
 import { useUser } from "@/lib/auth.tsx";
 import { TaskModal } from "@/components/TaskModal.tsx";
 import dayjs from "dayjs";
-import { EditOutlined, LinkOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
-import { progressColor, progressLabel } from "@/components/TaskStatusPill.tsx";
+import { UserOutlined } from "@ant-design/icons";
+import { priorityColor, progressColor, progressLabel } from "@/components/TaskStatusPill.tsx";
 import { useAppNotification } from "@/lib/useAppNotification";
-import useApp from "antd/es/app/useApp";
 
 const { Text } = Typography;
-
-const priorityColor: Record<string, string> = {
-    low: "default",
-    medium: "gold",
-    high: "red"
-};
 
 const progressOptions = taskProgressStates.map((progress) => ({
     label: progressLabel(progress),
@@ -55,6 +36,7 @@ export function TasksSection(props: { eventId: number }) {
     const { data: tasks, isLoading, error } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${props.eventId}`);
     const { data: members } = useSWR<ClubMember[]>(isTaskManager ? "/user" : null);
     const memberById = new Map((members ?? []).map((member) => [member.id, member]));
+    const [openTaskId, setOpenTaskId] = useState<number | null>(null);
 
     if (error) {
         return <Result status="error" title="Retrieval Error" subTitle="Unable to fetch tasks." />
@@ -72,10 +54,15 @@ export function TasksSection(props: { eventId: number }) {
 
         <Table
             rowKey="id"
+            size="small"
             loading={isLoading}
             dataSource={tasks ?? []}
             pagination={false}
             locale={{ emptyText: <Empty description="No tasks yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+            onRow={(task) => ({
+                onClick: () => setOpenTaskId(task.id),
+                style: { cursor: "pointer" }
+            })}
             columns={[
                 {
                     key: "title",
@@ -100,7 +87,9 @@ export function TasksSection(props: { eventId: number }) {
                     dataIndex: "progress",
                     width: 170,
                     render: (_, task) => (
-                        <ProgressSelect task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
+                        <div onClick={(e) => e.stopPropagation()}>
+                            <ProgressSelect task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
+                        </div>
                     )
                 },
                 {
@@ -125,22 +114,22 @@ export function TasksSection(props: { eventId: number }) {
                     render: (_, task) => task.dueDate
                         ? <Text style={{ color: token.colorTextSecondary }}>{dayjs(task.dueDate).format("D MMM YYYY")}</Text>
                         : <Text type="secondary">—</Text>
-                },
-                {
-                    key: "actions",
-                    title: "",
-                    width: 40,
-                    render: (_, task) => isTaskManager
-                        ? <TaskModal
-                            mode="update"
-                            eventId={props.eventId}
-                            task={task}
-                            trigger={<Button size="small" type="text" icon={<EditOutlined />} />}
-                        />
-                        : null
                 }
             ] as TableProps<TaskWithRelations>['columns']}
         />
+
+        {(tasks ?? []).map((task) => (
+            <TaskModal
+                key={task.id}
+                mode="update"
+                eventId={props.eventId}
+                task={task}
+                isTaskManager={isTaskManager}
+                memberById={memberById}
+                open={openTaskId === task.id}
+                onOpenChange={(value) => setOpenTaskId(value ? task.id : null)}
+            />
+        ))}
     </div>
 }
 
