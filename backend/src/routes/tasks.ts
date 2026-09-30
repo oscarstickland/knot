@@ -16,6 +16,7 @@ import {
     tasksTable
 } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
+import { describeZodError } from "../types/errors.ts";
 
 type Db = DbEnv["Variables"]["db"];
 
@@ -50,8 +51,13 @@ async function assertUsersInClub(db: Db, userIds: number[], clubId: number) {
         where: { id: { in: userIds }, clubId }
     });
 
-    if (members.length !== new Set(userIds).size) {
-        throw new HTTPException(400, { message: "One or more assignees are not members of this club" });
+    const uniqueUserIds = new Set(userIds);
+    if (members.length !== uniqueUserIds.size) {
+        const memberIds = new Set(members.map((member) => member.id));
+        const invalidIds = [...uniqueUserIds].filter((id) => !memberIds.has(id));
+        throw new HTTPException(400, {
+            message: `Cannot assign user(s) with ID ${invalidIds.join(", ")} as they are not members of this club`
+        });
     }
 }
 
@@ -66,8 +72,13 @@ async function assertDependenciesInEvent(db: Db, dependencyIds: number[], eventI
         where: { id: { in: dependencyIds }, eventId }
     });
 
-    if (dependencyTasks.length !== new Set(dependencyIds).size) {
-        throw new HTTPException(400, { message: "One or more dependencies do not belong to this event" });
+    const uniqueDependencyIds = new Set(dependencyIds);
+    if (dependencyTasks.length !== uniqueDependencyIds.size) {
+        const foundIds = new Set(dependencyTasks.map((task) => task.id));
+        const invalidIds = [...uniqueDependencyIds].filter((id) => !foundIds.has(id));
+        throw new HTTPException(400, {
+            message: `Cannot depend on task ID ${invalidIds.join(", ")} as it does not belong to this event`
+        });
     }
 }
 
@@ -100,7 +111,11 @@ async function assertNoDependencyCycle(db: Db, eventId: number, taskId: number, 
 
     for (const dependencyId of dependencyIds) {
         if (canReach(dependencyId, taskId, new Set())) {
-            throw new HTTPException(400, { message: "This dependency would create a circular dependency" });
+            const dependencyTask = await db.query.tasksTable.findFirst({ where: { id: dependencyId } });
+            const dependencyName = dependencyTask?.title ?? `Task ${dependencyId}`;
+            throw new HTTPException(400, {
+                message: `Cannot depend on "${dependencyName}" as it already depends on this task, either directly or transitively`
+            });
         }
     }
 }
@@ -173,11 +188,11 @@ tasksApp.get("/:id{[0-9]+}", async (c) => {
 tasksApp.post("/", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can create tasks" });
 
     const body = await c.req.json();
     const parsed = CreateTaskSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const event = await db.query.eventsTable.findFirst({
         where: { id: parsed.data.eventId, clubId: user.club.id }
@@ -230,12 +245,12 @@ tasksApp.post("/", async (c) => {
 tasksApp.put("/:id{[0-9]+}", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can edit tasks" });
 
     const taskId = Number(c.req.param("id"));
     const body = await c.req.json();
     const parsed = UpdateTaskSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const existingTask = await loadClubTask(db, taskId, user.club.id);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
@@ -295,11 +310,11 @@ tasksApp.patch("/:id{[0-9]+}/progress", async (c) => {
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
 
     const allowed = isExecOrAdmin(user.role) || await isAssignedToTask(db, taskId, user.id);
-    if (!allowed) throw new HTTPException(403);
+    if (!allowed) throw new HTTPException(403, { message: "Only club admins, execs, or users assigned to this task can update its progress" });
 
     const body = await c.req.json();
     const parsed = UpdateTaskProgressSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     if (parsed.data.progress === "completed") {
         await assertDependenciesCompleted(db, taskId, existingTask.title);
@@ -334,11 +349,11 @@ tasksApp.post("/:id{[0-9]+}/documents", async (c) => {
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
 
     const allowed = isExecOrAdmin(user.role) || await isAssignedToTask(db, taskId, user.id);
-    if (!allowed) throw new HTTPException(403);
+    if (!allowed) throw new HTTPException(403, { message: "Only club admins, execs, or users assigned to this task can add documents to it" });
 
     const body = await c.req.json();
     const parsed = AddTaskDocumentSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const document = await db.transaction(async (tx) => {
         const [document] = await tx
