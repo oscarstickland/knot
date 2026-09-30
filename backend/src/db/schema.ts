@@ -1,9 +1,13 @@
 import { defineRelations } from "drizzle-orm";
-import {boolean, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, unique, varchar} from "drizzle-orm/pg-core";
+import {boolean, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, unique, varchar} from "drizzle-orm/pg-core";
 
 export const userRoles = ["standard", "exec", "admin"] as const;
 export type UserRole = (typeof userRoles)[number];
 export const rolesEnum = pgEnum("roles", userRoles);
+
+export const userStatuses = ["active", "offboarded"] as const;
+export type UserStatus = (typeof userStatuses)[number];
+export const userStatusEnum = pgEnum("user_status", userStatuses);
 
 export const taskPriorities = ["low", "medium", "high"] as const;
 export const taskPriorityEnum = pgEnum("task_priority", taskPriorities);
@@ -25,6 +29,7 @@ export const usersTable = pgTable("users", {
     email: varchar({ length: 255 }).notNull().unique(),
     password: varchar({ length: 500 }).notNull(),
     role: rolesEnum().default("standard").notNull(),
+    status: userStatusEnum().default("active").notNull(),
     clubId: integer("club_id").notNull(),
 });
 
@@ -95,6 +100,34 @@ export const eventAttendanceTable = pgTable("event_attendance", {
     unique().on(table.eventId, table.email)
 ])
 
+export const budgetCategoriesTable = pgTable("budget_categories", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    clubId: integer("club_id").notNull(),
+    name: varchar({ length: 255 }).notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+    unique().on(table.clubId, table.name)
+]);
+
+export const eventBudgetsTable = pgTable("event_budgets", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    eventId: integer("event_id").notNull(),
+    categoryId: integer("category_id").notNull(),
+    allocatedAmount: numeric("allocated_amount", { precision: 10, scale: 2, mode: "number" }).notNull().default(0),
+}, (table) => [
+    unique().on(table.eventId, table.categoryId)
+]);
+
+export const expensesTable = pgTable("expenses", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    eventId: integer("event_id").notNull(),
+    categoryId: integer("category_id").notNull(),
+    amount: numeric({ precision: 10, scale: 2, mode: "number" }).notNull(),
+    description: varchar({ length: 500 }).notNull(),
+    createdBy: integer("created_by").notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+});
+
 export const relations = defineRelations({
     clubsTable,
     usersTable,
@@ -104,7 +137,10 @@ export const relations = defineRelations({
     taskDependenciesTable,
     taskDocumentsTable,
     taskAuditLogTable,
-    eventAttendanceTable
+    eventAttendanceTable,
+    budgetCategoriesTable,
+    eventBudgetsTable,
+    expensesTable
 }, (r) => ({
     usersTable: {
         club: r.one.clubsTable({
@@ -117,11 +153,14 @@ export const relations = defineRelations({
             from: r.eventsTable.clubId,
             to: r.clubsTable.id
         }),
-        attendance: r.many.eventAttendanceTable()
+        attendance: r.many.eventAttendanceTable(),
+        budgets: r.many.eventBudgetsTable(),
+        expenses: r.many.expensesTable()
     },
     clubsTable: {
         users: r.many.usersTable(),
-        events: r.many.eventsTable()
+        events: r.many.eventsTable(),
+        budgetCategories: r.many.budgetCategoriesTable()
     },
     tasksTable: {
         event: r.one.eventsTable({
@@ -188,6 +227,38 @@ export const relations = defineRelations({
         event: r.one.eventsTable({
             from: r.eventAttendanceTable.eventId,
             to: r.eventsTable.id
+        })
+    },
+    budgetCategoriesTable: {
+        club: r.one.clubsTable({
+            from: r.budgetCategoriesTable.clubId,
+            to: r.clubsTable.id
+        }),
+        allocations: r.many.eventBudgetsTable(),
+        expenses: r.many.expensesTable()
+    },
+    eventBudgetsTable: {
+        event: r.one.eventsTable({
+            from: r.eventBudgetsTable.eventId,
+            to: r.eventsTable.id
+        }),
+        category: r.one.budgetCategoriesTable({
+            from: r.eventBudgetsTable.categoryId,
+            to: r.budgetCategoriesTable.id
+        })
+    },
+    expensesTable: {
+        event: r.one.eventsTable({
+            from: r.expensesTable.eventId,
+            to: r.eventsTable.id
+        }),
+        category: r.one.budgetCategoriesTable({
+            from: r.expensesTable.categoryId,
+            to: r.budgetCategoriesTable.id
+        }),
+        creator: r.one.usersTable({
+            from: r.expensesTable.createdBy,
+            to: r.usersTable.id
         })
     }
 }));

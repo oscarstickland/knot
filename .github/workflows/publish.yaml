@@ -62,7 +62,7 @@ jobs:
       - name: Bump image tag for ArgoCD (GitOps commit)
         run: |
           cd deploy/overlays/prod
-          npx --yes kustomize@5.4.3 edit set image \
+          kustomize edit set image \
             ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.sha }}
           cd -
           git config user.name "github-actions[bot]"

@@ -91,7 +91,7 @@ function EventInformation(props: { id: string }) {
         {
             key: "budget",
             label: "Budget",
-            children: <BudgetTab />
+            children: <BudgetTab event={data} />
         },
         {
             key: "attendance",
