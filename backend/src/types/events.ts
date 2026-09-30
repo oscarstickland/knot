@@ -20,6 +20,11 @@ export const ArchiveEventSchema = z.object({
     archived: z.boolean()
 });
 
+export const SetAttendanceOpenSchema = z.object({
+    attendanceOpen: z.boolean()
+});
+
 export type UpdateEventData = z.infer<typeof UpdateEventSchema>;
 export type ArchiveEventData = z.infer<typeof ArchiveEventSchema>;
+export type SetAttendanceOpenData = z.infer<typeof SetAttendanceOpenSchema>;
 export type ClubEvent = typeof eventsTable.$inferSelect;

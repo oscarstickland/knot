@@ -4,7 +4,7 @@ import type {DbEnv} from "../db/connection.ts";
 import {zValidator} from "@hono/zod-validator";
 import { z } from 'zod';
 import {HTTPException} from "hono/http-exception";
-import {ArchiveEventSchema, UpdateEventSchema} from "../types/events.ts";
+import {ArchiveEventSchema, SetAttendanceOpenSchema, UpdateEventSchema} from "../types/events.ts";
 import {CreateExpenseSchema, SetEventBudgetsSchema} from "../types/budget.ts";
 import {clubsTable, eventsTable, budgetCategoriesTable, eventBudgetsTable, expensesTable} from "../db/schema.ts";
 import {and, eq} from "drizzle-orm";
@@ -115,6 +115,34 @@ eventsApp.patch("/:id{[0-9]+}/archive", async (c) => {
     const [updatedEvent] = await db
         .update(eventsTable)
         .set({ archived: parsed.data.archived })
+        .where(and(eq(eventsTable.clubId, user.club.id), eq(eventsTable.id, eventId)))
+        .returning();
+
+    if (!updatedEvent) throw new HTTPException(404, { message: "Event not found or unauthorized" });
+
+    return c.json(updatedEvent);
+});
+
+eventsApp.patch("/:id{[0-9]+}/attendance", async (c) => {
+    const eventId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const user = c.var.user;
+
+    if (user.role !== "admin" && user.role !== "exec") throw new HTTPException(403, { message: "Only club admins and execs can open or close attendance" });
+
+    const body = await c.req.json();
+    const parsed = SetAttendanceOpenSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
+
+    const existingEvent = await db.query.eventsTable.findFirst({
+        where: { id: eventId, clubId: user.club.id }
+    });
+    if (!existingEvent) throw new HTTPException(404, { message: "Event not found or unauthorized" });
+    if (existingEvent.archived) throw new HTTPException(404, { message: "Event not found or unauthorized" });
+
+    const [updatedEvent] = await db
+        .update(eventsTable)
+        .set({ attendanceOpen: parsed.data.attendanceOpen })
         .where(and(eq(eventsTable.clubId, user.club.id), eq(eventsTable.id, eventId)))
         .returning();
 

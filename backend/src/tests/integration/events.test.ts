@@ -305,6 +305,161 @@ describe("Database Integration Test", () => {
         expect(res.status).toBe(400);
     });
 
+    describe("PATCH /:id/attendance route (opening/closing attendance)", () => {
+        it.each(["admin", "exec"])("allows %s to open attendance for an event", async (role) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+            const referenceDate = new Date();
+
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id, attendanceOpen: false })
+                .returning();
+
+            const res = await app.request(`/api/events/${event!.id}/attendance`, {
+                method: "PATCH",
+                headers: { cookie },
+                body: JSON.stringify({ attendanceOpen: true })
+            });
+            expect(res.status).toBe(200);
+
+            const updatedEvent = await harness.db.query.eventsTable.findFirst({
+                where: { id: event!.id }
+            });
+            expect(updatedEvent!.attendanceOpen).toBe(true);
+        });
+
+        it.each(["admin", "exec"])("allows %s to close attendance for an event", async (role) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+            const referenceDate = new Date();
+
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id, attendanceOpen: true })
+                .returning();
+
+            const res = await app.request(`/api/events/${event!.id}/attendance`, {
+                method: "PATCH",
+                headers: { cookie },
+                body: JSON.stringify({ attendanceOpen: false })
+            });
+            expect(res.status).toBe(200);
+
+            const updatedEvent = await harness.db.query.eventsTable.findFirst({
+                where: { id: event!.id }
+            });
+            expect(updatedEvent!.attendanceOpen).toBe(false);
+        });
+
+        it("prevents standard users from opening attendance for an event", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+            const referenceDate = new Date();
+
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id, attendanceOpen: false })
+                .returning();
+
+            const res = await app.request(`/api/events/${event!.id}/attendance`, {
+                method: "PATCH",
+                headers: { cookie },
+                body: JSON.stringify({ attendanceOpen: true })
+            });
+            expect(res.status).toBe(403);
+
+            const unchangedEvent = await harness.db.query.eventsTable.findFirst({
+                where: { id: event!.id }
+            });
+            expect(unchangedEvent!.attendanceOpen).toBe(false);
+        });
+
+        it("rejects a non-boolean attendanceOpen value", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "admin", club.id, "User");
+            const referenceDate = new Date();
+
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id })
+                .returning();
+
+            const res = await app.request(`/api/events/${event!.id}/attendance`, {
+                method: "PATCH",
+                headers: { cookie },
+                body: JSON.stringify({ attendanceOpen: "yes" })
+            });
+            expect(res.status).toBe(400);
+        });
+
+        it("returns 404 for an event that does not exist", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "admin", club.id, "User");
+
+            const res = await app.request("/api/events/999999/attendance", {
+                method: "PATCH",
+                headers: { cookie },
+                body: JSON.stringify({ attendanceOpen: true })
+            });
+            expect(res.status).toBe(404);
+        });
+
+        it("prevents opening attendance for an archived event", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "admin", club.id, "User");
+            const referenceDate = new Date();
+
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club.id, archived: true, attendanceOpen: false })
+                .returning();
+
+            const res = await app.request(`/api/events/${event!.id}/attendance`, {
+                method: "PATCH",
+                headers: { cookie },
+                body: JSON.stringify({ attendanceOpen: true })
+            });
+            expect(res.status).toBe(404);
+
+            const unchangedEvent = await harness.db.query.eventsTable.findFirst({
+                where: { id: event!.id }
+            });
+            expect(unchangedEvent!.attendanceOpen).toBe(false);
+        });
+
+        it("prevents opening attendance for another club's event", async () => {
+            const app = await harness.setupApp();
+            const club1 = await harness.setupClub("Club 1");
+            const club2 = await harness.setupClub("Club 2");
+            const { cookie } = await harness.setupUser("test@test.com", "admin", club1.id, "User");
+            const referenceDate = new Date();
+
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId: club2.id, attendanceOpen: false })
+                .returning();
+
+            const res = await app.request(`/api/events/${event!.id}/attendance`, {
+                method: "PATCH",
+                headers: { cookie },
+                body: JSON.stringify({ attendanceOpen: true })
+            });
+            expect(res.status).toBe(404);
+
+            const unchangedEvent = await harness.db.query.eventsTable.findFirst({
+                where: { id: event!.id }
+            });
+            expect(unchangedEvent!.attendanceOpen).toBe(false);
+        });
+    });
+
     describe("GET / route (listing events)", () => {
         async function seedEvents(harness: TestDatabaseHarness, clubId: number) {
             const referenceDate = new Date();
