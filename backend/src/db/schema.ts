@@ -5,6 +5,10 @@ export const userRoles = ["standard", "exec", "admin"] as const;
 export type UserRole = (typeof userRoles)[number];
 export const rolesEnum = pgEnum("roles", userRoles);
 
+export const userStatuses = ["active", "offboarded"] as const;
+export type UserStatus = (typeof userStatuses)[number];
+export const userStatusEnum = pgEnum("user_status", userStatuses);
+
 export const taskPriorities = ["low", "medium", "high"] as const;
 export const taskPriorityEnum = pgEnum("task_priority", taskPriorities);
 
@@ -25,6 +29,7 @@ export const usersTable = pgTable("users", {
     email: varchar({ length: 255 }).notNull().unique(),
     password: varchar({ length: 500 }).notNull(),
     role: rolesEnum().default("standard").notNull(),
+    status: userStatusEnum().default("active").notNull(),
     clubId: integer("club_id").notNull(),
 });
 

@@ -25,8 +25,18 @@ export const BulkRoleUpdateSchema = z.object({
 
 export type BulkRoleUpdateData = z.infer<typeof BulkRoleUpdateSchema>;
 
-export const BulkDeleteSchema = z.object({
+export const BulkOffboardSchema = z.object({
     ids: z.array(z.number().int()).min(1, "Select at least one member")
 });
 
-export type BulkDeleteData = z.infer<typeof BulkDeleteSchema>;
+export type BulkOffboardData = z.infer<typeof BulkOffboardSchema>;
+
+export interface OffboardedTask {
+    id: number;
+    title: string;
+}
+
+export interface OffboardResult {
+    member: ClubMember;
+    unassignedTasks: OffboardedTask[];
+}

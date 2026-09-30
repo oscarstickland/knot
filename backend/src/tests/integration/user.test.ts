@@ -1,7 +1,8 @@
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect } from "bun:test";
 import { type TestDatabaseHarness, setupHarness } from "../harness.ts";
-import { usersTable } from "../../db/schema.ts";
-import { verifyPassword } from "../../services/auth.ts";
+import { eventsTable, taskAssignmentsTable, tasksTable, usersTable } from "../../db/schema.ts";
+import { hashPassword, verifyPassword } from "../../services/auth.ts";
+import { eq } from "drizzle-orm";
 
 describe("User Admin Settings Integration Test", () => {
     let harness: TestDatabaseHarness;
@@ -21,6 +22,18 @@ describe("User Admin Settings Integration Test", () => {
     afterEach(async () => {
         await harness.rollbackTransaction();
     });
+
+    async function assignTaskTo(clubId: number, assigneeId: number, creatorId: number) {
+        const [event] = await harness.db.insert(eventsTable).values({
+            name: "Event", location: "Venue", clubId,
+            start: new Date(), end: new Date()
+        }).returning();
+        const [task] = await harness.db.insert(tasksTable).values({
+            eventId: event!.id, title: "Task", description: "Description", createdBy: creatorId
+        }).returning();
+        await harness.db.insert(taskAssignmentsTable).values({ taskId: task!.id, userId: assigneeId });
+        return task!;
+    }
 
     describe("POST /api/user (create)", () => {
         it.each(["standard", "exec"])("prevents %s users from creating a user", async (role) => {
@@ -191,67 +204,127 @@ describe("User Admin Settings Integration Test", () => {
         });
     });
 
-    describe("DELETE /api/user/:id (delete)", () => {
-        it.each(["standard", "exec"])("prevents %s users from deleting a member", async (role) => {
+    describe("POST /api/user/:id/offboard (offboard)", () => {
+        it.each(["standard", "exec"])("prevents %s users from offboarding a member", async (role) => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const { cookie } = await harness.setupUser("actor@test.com", role, club.id, "Actor");
             const { user: target } = await harness.setupUser("target@test.com", "standard", club.id, "Target");
 
-            const res = await app.request(`/api/user/${target.id}`, {
-                method: "DELETE",
+            const res = await app.request(`/api/user/${target.id}/offboard`, {
+                method: "POST",
                 headers: { cookie }
             });
             expect(res.status).toBe(403);
         });
 
-        it.each(["standard", "exec"])("allows an admin to delete a %s member", async (targetRole) => {
+        it.each(["standard", "exec"])("allows an admin to offboard a %s member", async (targetRole) => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
             const { user: target } = await harness.setupUser("target@test.com", targetRole, club.id, "Target");
 
-            const res = await app.request(`/api/user/${target.id}`, {
-                method: "DELETE",
+            const res = await app.request(`/api/user/${target.id}/offboard`, {
+                method: "POST",
                 headers: { cookie }
             });
-            expect(res.status).toBe(204);
+            expect(res.status).toBe(200);
 
-            const deleted = await harness.db.query.usersTable.findFirst({ where: { id: target.id } });
-            expect(deleted).toBeUndefined();
+            const offboarded = await harness.db.query.usersTable.findFirst({ where: { id: target.id } });
+            expect(offboarded).not.toBeUndefined();
+            expect(offboarded!.status).toBe("offboarded");
         });
 
-        it("prevents an admin from deleting another admin", async () => {
+        it("unassigns the member from their tasks and logs the change, without deleting the task", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie, user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user: target } = await harness.setupUser("target@test.com", "standard", club.id, "Target");
+            const task = await assignTaskTo(club.id, target.id, admin.id);
+
+            const res = await app.request(`/api/user/${target.id}/offboard`, {
+                method: "POST",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as { unassignedTasks: { id: number, title: string }[] };
+            expect(body.unassignedTasks).toEqual([{ id: task.id, title: task.title }]);
+
+            const assignments = await harness.db.query.taskAssignmentsTable.findMany({
+                where: { taskId: task.id }
+            });
+            expect(assignments.length).toBe(0);
+
+            const stillExists = await harness.db.query.tasksTable.findFirst({ where: { id: task.id } });
+            expect(stillExists).not.toBeUndefined();
+            expect(stillExists!.createdBy).toBe(admin.id);
+
+            const auditLog = await harness.db.query.taskAuditLogTable.findMany({ where: { taskId: task.id } });
+            expect(auditLog.some((entry) => (entry.changes as { unassignedMember?: number }).unassignedMember === target.id)).toBe(true);
+        });
+
+        it("blocks an offboarded member from logging in", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user: target } = await harness.setupUser("target@test.com", "standard", club.id, "Target");
+            await harness.db.update(usersTable)
+                .set({ password: await hashPassword("password123") })
+                .where(eq(usersTable.id, target.id));
+
+            await app.request(`/api/user/${target.id}/offboard`, { method: "POST", headers: { cookie } });
+
+            const loginRes = await app.request("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: "target@test.com", password: "password123" })
+            });
+            expect(loginRes.status).toBe(401);
+        });
+
+        it("prevents an admin from offboarding another admin", async () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
             const { user: otherAdmin } = await harness.setupUser("other-admin@test.com", "admin", club.id, "Other Admin");
 
-            const res = await app.request(`/api/user/${otherAdmin.id}`, {
-                method: "DELETE",
+            const res = await app.request(`/api/user/${otherAdmin.id}/offboard`, {
+                method: "POST",
                 headers: { cookie }
             });
             expect(res.status).toBe(400);
 
-            const stillExists = await harness.db.query.usersTable.findFirst({ where: { id: otherAdmin.id } });
-            expect(stillExists).not.toBeUndefined();
+            const stillActive = await harness.db.query.usersTable.findFirst({ where: { id: otherAdmin.id } });
+            expect(stillActive!.status).toBe("active");
         });
 
-        it("prevents deleting a member from another club", async () => {
+        it("prevents offboarding a member from another club", async () => {
             const app = await harness.setupApp();
             const club1 = await harness.setupClub("Club1");
             const club2 = await harness.setupClub("Club2");
             const { cookie } = await harness.setupUser("admin@test.com", "admin", club1.id, "Admin");
             const { user: target } = await harness.setupUser("target@test.com", "standard", club2.id, "Target");
 
-            const res = await app.request(`/api/user/${target.id}`, {
-                method: "DELETE",
+            const res = await app.request(`/api/user/${target.id}/offboard`, {
+                method: "POST",
                 headers: { cookie }
             });
             expect(res.status).toBe(404);
 
-            const stillExists = await harness.db.query.usersTable.findFirst({ where: { id: target.id } });
-            expect(stillExists).not.toBeUndefined();
+            const stillActive = await harness.db.query.usersTable.findFirst({ where: { id: target.id } });
+            expect(stillActive!.status).toBe("active");
+        });
+
+        it("rejects offboarding a member who is already offboarded", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user: target } = await harness.setupUser("target@test.com", "standard", club.id, "Target");
+
+            await app.request(`/api/user/${target.id}/offboard`, { method: "POST", headers: { cookie } });
+            const res = await app.request(`/api/user/${target.id}/offboard`, { method: "POST", headers: { cookie } });
+            expect(res.status).toBe(400);
         });
     });
 
@@ -346,14 +419,14 @@ describe("User Admin Settings Integration Test", () => {
         });
     });
 
-    describe("POST /api/user/bulk-delete (bulk delete)", () => {
-        it.each(["standard", "exec"])("prevents %s users from bulk deleting members", async (role) => {
+    describe("POST /api/user/bulk-offboard (bulk offboard)", () => {
+        it.each(["standard", "exec"])("prevents %s users from bulk offboarding members", async (role) => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const { cookie } = await harness.setupUser("actor@test.com", role, club.id, "Actor");
             const { user: target } = await harness.setupUser("target@test.com", "standard", club.id, "Target");
 
-            const res = await app.request("/api/user/bulk-delete", {
+            const res = await app.request("/api/user/bulk-offboard", {
                 method: "POST",
                 headers: { cookie },
                 body: JSON.stringify({ ids: [target.id] })
@@ -361,62 +434,66 @@ describe("User Admin Settings Integration Test", () => {
             expect(res.status).toBe(403);
         });
 
-        it("allows an admin to bulk delete standard/exec members", async () => {
+        it("allows an admin to bulk offboard standard/exec members and reports unassigned tasks", async () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
-            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { cookie, user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
             const { user: target1 } = await harness.setupUser("target1@test.com", "standard", club.id, "Target1");
             const { user: target2 } = await harness.setupUser("target2@test.com", "exec", club.id, "Target2");
+            const task = await assignTaskTo(club.id, target1.id, admin.id);
 
-            const res = await app.request("/api/user/bulk-delete", {
+            const res = await app.request("/api/user/bulk-offboard", {
                 method: "POST",
                 headers: { cookie },
                 body: JSON.stringify({ ids: [target1.id, target2.id] })
             });
             expect(res.status).toBe(200);
 
-            const remaining = await harness.db.query.usersTable.findMany({
+            const body = await res.json() as { unassignedTasks: { id: number, title: string }[] };
+            expect(body.unassignedTasks).toEqual([{ id: task.id, title: task.title }]);
+
+            const offboarded = await harness.db.query.usersTable.findMany({
                 where: { id: { in: [target1.id, target2.id] } }
             });
-            expect(remaining.length).toBe(0);
+            expect(offboarded.every((member) => member.status === "offboarded")).toBe(true);
         });
 
-        it("does not delete an admin even when included in the bulk selection", async () => {
+        it("does not offboard an admin even when included in the bulk selection", async () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
             const { user: otherAdmin } = await harness.setupUser("other-admin@test.com", "admin", club.id, "Other Admin");
             const { user: target } = await harness.setupUser("target@test.com", "standard", club.id, "Target");
 
-            const res = await app.request("/api/user/bulk-delete", {
+            const res = await app.request("/api/user/bulk-offboard", {
                 method: "POST",
                 headers: { cookie },
                 body: JSON.stringify({ ids: [otherAdmin.id, target.id] })
             });
             expect(res.status).toBe(200);
 
-            const adminStillExists = await harness.db.query.usersTable.findFirst({ where: { id: otherAdmin.id } });
-            const targetDeleted = await harness.db.query.usersTable.findFirst({ where: { id: target.id } });
-            expect(adminStillExists).not.toBeUndefined();
-            expect(targetDeleted).toBeUndefined();
+            const adminStillActive = await harness.db.query.usersTable.findFirst({ where: { id: otherAdmin.id } });
+            const targetOffboarded = await harness.db.query.usersTable.findFirst({ where: { id: target.id } });
+            expect(adminStillActive!.status).toBe("active");
+            expect(targetOffboarded!.status).toBe("offboarded");
         });
 
-        it("does not delete users belonging to another club", async () => {
+        it("does not offboard users belonging to another club", async () => {
             const app = await harness.setupApp();
             const club1 = await harness.setupClub("Club1");
             const club2 = await harness.setupClub("Club2");
             const { cookie } = await harness.setupUser("admin@test.com", "admin", club1.id, "Admin");
             const { user: target } = await harness.setupUser("target@test.com", "standard", club2.id, "Target");
 
-            const res = await app.request("/api/user/bulk-delete", {
+            const res = await app.request("/api/user/bulk-offboard", {
                 method: "POST",
                 headers: { cookie },
                 body: JSON.stringify({ ids: [target.id] })
             });
             expect(res.status).toBe(200);
 
-            const stillExists = await harness.db.query.usersTable.findFirst({ where: { id: target.id } });
-            expect(stillExists).not.toBeUndefined();
+            const stillActive = await harness.db.query.usersTable.findFirst({ where: { id: target.id } });
+            expect(stillActive!.status).toBe("active");
         });
     });
 });

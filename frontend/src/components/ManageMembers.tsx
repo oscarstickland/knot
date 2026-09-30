@@ -12,7 +12,7 @@ import {
     notification,
     type TableProps
 } from "antd";
-import { DeleteOutlined, DownloadOutlined, DownOutlined, SearchOutlined } from "@ant-design/icons";
+import { DownloadOutlined, DownOutlined, SearchOutlined, UserDeleteOutlined } from "@ant-design/icons";
 import useSWR, { mutate } from "swr";
 import type { ClubMember } from "@knot/backend/user";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
@@ -26,6 +26,8 @@ const roleColor = (role: ClubMember["role"]) =>
     role === "admin" ? "red" : role === "exec" ? "blue" : "default";
 
 const roleLabel = (role: ClubMember["role"]) => role.toUpperCase();
+
+const isInactive = (member: ClubMember) => member.role === "admin" || member.status === "offboarded";
 
 function exportMembersToCsv(members: ClubMember[]) {
     const escapeCsvCell = (cell: string) => `"${cell.replace(/"/g, '""')}"`;
@@ -96,18 +98,21 @@ function MembersTable() {
             });
     };
 
-    const bulkDelete = () => {
-        AxiosInstance.post("/user/bulk-delete", { ids: selectedIds })
-            .then(async () => {
+    const bulkOffboard = () => {
+        AxiosInstance.post("/user/bulk-offboard", { ids: selectedIds })
+            .then(async ({ data }: { data: { unassignedTasks: { id: number, title: string }[] } }) => {
                 await mutate("/user");
                 setSelectedIds([]);
+                const taskNote = data.unassignedTasks.length > 0
+                    ? ` ${data.unassignedTasks.length} task(s) are now unassigned and need a new owner.`
+                    : "";
                 api["success"]({
                     title: "Success",
-                    description: `Deleted ${selectedIds.length} member(s).`
+                    description: `Offboarded ${selectedIds.length} member(s).${taskNote}`
                 });
             })
             .catch((err) => {
-                const message = err?.response?.data?.message ?? "Members could not be deleted.";
+                const message = err?.response?.data?.message ?? "Members could not be offboarded.";
                 api["error"]({ title: "Error", description: message });
             });
     };
@@ -137,6 +142,20 @@ function MembersTable() {
             onFilter: (value, member) => member.role === value,
             sorter: (a, b) => a.role.localeCompare(b.role),
             render: (role: ClubMember["role"]) => <Tag color={roleColor(role)}>{roleLabel(role)}</Tag>
+        },
+        {
+            key: "status",
+            title: "Status",
+            dataIndex: "status",
+            filters: [
+                { text: "Active", value: "active" },
+                { text: "Offboarded", value: "offboarded" }
+            ],
+            onFilter: (value, member) => member.status === value,
+            sorter: (a, b) => a.status.localeCompare(b.status),
+            render: (status: ClubMember["status"]) => (
+                <Tag color={status === "active" ? "green" : "default"}>{status.toUpperCase()}</Tag>
+            )
         }
     ];
 
@@ -179,13 +198,13 @@ function MembersTable() {
                             </Button>
                         </Dropdown>
                         <Popconfirm
-                            title="Delete members"
-                            description={`Are you sure you want to delete ${selectedIds.length} member(s)?`}
-                            onConfirm={bulkDelete}
-                            okText="Delete"
+                            title="Offboard members"
+                            description={`Offboard ${selectedIds.length} member(s)? They'll be unassigned from any active tasks and won't be able to log in. Their task history is kept.`}
+                            onConfirm={bulkOffboard}
+                            okText="Offboard"
                             okButtonProps={{ danger: true }}
                         >
-                            <Button danger icon={<DeleteOutlined />}>Delete ({selectedIds.length})</Button>
+                            <Button danger icon={<UserDeleteOutlined />}>Offboard ({selectedIds.length})</Button>
                         </Popconfirm>
                     </>
                 )}
@@ -202,18 +221,18 @@ function MembersTable() {
             columns={columns}
             loading={isLoading}
             dataSource={filteredData}
-            rowClassName={(member) => member.role === "admin" ? "member-row-disabled" : ""}
+            rowClassName={(member) => isInactive(member) ? "member-row-disabled" : ""}
             rowSelection={{
                 selectedRowKeys: selectedIds,
                 onChange: (keys) => setSelectedIds(keys as number[]),
-                getCheckboxProps: (member) => ({ disabled: member.role === "admin" })
+                getCheckboxProps: (member) => ({ disabled: isInactive(member) })
             }}
             onRow={(member) => ({
                 onClick: () => {
-                    if (member.role === "admin") return;
+                    if (isInactive(member)) return;
                     setSelectedMember(member);
                 },
-                style: { cursor: member.role === "admin" ? "default" : "pointer" }
+                style: { cursor: isInactive(member) ? "default" : "pointer" }
             })}
         />
         {selectedMember && (

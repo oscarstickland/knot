@@ -72,6 +72,16 @@ async function generateData() {
     };
     const [insertedUser3] = await db.insert(usersTable).values(user3).returning();
 
+    const user4: typeof usersTable.$inferInsert = {
+        name: "Priya Nair",
+        email: "offboarded@gmail.com",
+        password: await hashPassword("password"),
+        role: "standard",
+        status: "offboarded",
+        clubId: insertedClub1!.id
+    };
+    const [insertedUser4] = await db.insert(usersTable).values(user4).returning();
+
     console.log("-- Inserting Events");
     const event1: typeof eventsTable.$inferInsert = {
         name: "MAC Open Day",
@@ -142,6 +152,12 @@ async function generateData() {
         taskId: insertedTask1!.id,
         url: "https://example.com/venue-contract.pdf",
         addedBy: insertedUser1!.id
+    });
+    // Added before this member was offboarded - stays attributed to them.
+    await db.insert(taskDocumentsTable).values({
+        taskId: insertedTask2!.id,
+        url: "https://example.com/invite-draft.pdf",
+        addedBy: insertedUser4!.id
     });
 
     console.log("-- Inserting Task Audit Log");
