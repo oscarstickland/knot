@@ -26,6 +26,8 @@ export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabas
     app.use("*", dbMiddleware);
     app.use(logger());
 
+    app.get("/api/health", (c) => c.json({ status: "ok" }));
+
     app.route("/api/user", userApp);
     app.route("/api/auth", authApp);
     app.route("/api/events", eventsApp);
