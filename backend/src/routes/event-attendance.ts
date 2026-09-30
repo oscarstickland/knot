@@ -10,6 +10,7 @@ import {
 } from "../types/event-attendance";
 import { eventAttendanceTable } from "../db/schema";
 import { count, eq, max } from "drizzle-orm";
+import { describeZodError } from "../types/errors";
 
 const eventAttendanceApp = new Hono<UserEnv & DbEnv>();
 
@@ -32,7 +33,7 @@ eventAttendanceApp.post("/:slug/register", async (c) => {
     const body = await c.req.json();
 
     const parsed = RegisterAttendanceSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const event = await db.query.eventsTable.findFirst({
         where: { slug }
