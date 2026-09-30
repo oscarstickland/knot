@@ -8,6 +8,7 @@ import {ArchiveEventSchema, UpdateEventSchema} from "../types/events.ts";
 import {CreateExpenseSchema, SetEventBudgetsSchema} from "../types/budget.ts";
 import {clubsTable, eventsTable, budgetCategoriesTable, eventBudgetsTable, expensesTable} from "../db/schema.ts";
 import {and, eq} from "drizzle-orm";
+import {describeZodError} from "../types/errors.ts";
 
 function isExecOrAdmin(role: string): boolean {
     return role === "exec" || role === "admin";
@@ -23,7 +24,7 @@ eventsApp.get("/", async (c) => {
     const archivedParam = c.req.query("archived");
 
     if (archivedParam !== "false" && !isEventManager) {
-        throw new HTTPException(403);
+        throw new HTTPException(403, { message: "Only club admins and execs can view archived events" });
     }
 
     const events = await db.query.eventsTable.findMany({
@@ -43,11 +44,11 @@ eventsApp.post("/", async (c) => {
     const body = await c.req.json();
 
     if (user.role != "admin" && user.role != "exec") {
-        throw new HTTPException(403);
+        throw new HTTPException(403, { message: "Only club admins and execs can create events" });
     }
 
     const parsed = UpdateEventSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const newEvent = await db
         .insert(eventsTable)
@@ -64,8 +65,8 @@ eventsApp.get("/:id{[0-9]+}", async (c) => {
         where: { id: eventId, clubId: user.club.id }
     })
 
-    if (!event) throw new HTTPException(404);
-    if (event.archived && user.role !== "admin" && user.role !== "exec") throw new HTTPException(404);
+    if (!event) throw new HTTPException(404, { message: "Event not found" });
+    if (event.archived && user.role !== "admin" && user.role !== "exec") throw new HTTPException(404, { message: "Event not found" });
 
     return c.json(event);
 });
@@ -78,7 +79,7 @@ eventsApp.put("/:id{[0-9]+}", async (c) => {
 
     const parsed = UpdateEventSchema.safeParse(body);
 
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const existingEvent = await db.query.eventsTable.findFirst({
         where: { id: eventId, clubId: user.club.id }
@@ -105,11 +106,11 @@ eventsApp.patch("/:id{[0-9]+}/archive", async (c) => {
     const db = c.get("db");
     const user = c.var.user;
 
-    if (user.role !== "admin" && user.role !== "exec") throw new HTTPException(403);
+    if (user.role !== "admin" && user.role !== "exec") throw new HTTPException(403, { message: "Only club admins and execs can archive or unarchive events" });
 
     const body = await c.req.json();
     const parsed = ArchiveEventSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const [updatedEvent] = await db
         .update(eventsTable)

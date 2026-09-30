@@ -160,7 +160,7 @@ function MembersTable() {
     ];
 
     if (error) {
-        return <Result status="error" title="Retrieval Error" subTitle="Unable to fetch club members." />
+        return <Result status="error" title="Retrieval Error" subTitle="Something went wrong loading the member list. Try refreshing the page." />
     }
 
     return <>
