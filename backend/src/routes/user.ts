@@ -5,6 +5,7 @@ import { HTTPException } from "hono/http-exception";
 import { usersTable } from "../db/schema";
 import { and, eq, getTableColumns, inArray, ne } from "drizzle-orm";
 import { BulkDeleteSchema, BulkRoleUpdateSchema, CreateMemberSchema, UpdateMemberSchema } from "../types/user";
+import { describeZodError } from "../types/errors";
 
 const userApp = new Hono<UserEnv & DbEnv>();
 userApp.use("*", isAuthenticated);
@@ -15,7 +16,7 @@ userApp.get("/me", async (c) => {
 
 userApp.get("/", async (c) => {
     const user = c.var.user;
-    if (user.role !== "admin" && user.role !== "exec") throw new HTTPException(403);
+    if (user.role !== "admin" && user.role !== "exec") throw new HTTPException(403, { message: "Only admins and execs can view the member list" });
 
     const db = c.get("db");
     const { password, ...columns } = getTableColumns(usersTable);
@@ -30,13 +31,13 @@ userApp.get("/", async (c) => {
 
 userApp.post("/", async (c) => {
     const admin = c.var.user;
-    if (admin.role !== "admin") throw new HTTPException(403);
+    if (admin.role !== "admin") throw new HTTPException(403, { message: "Only admins can create members" });
 
     const db = c.get("db");
     const body = await c.req.json();
 
     const parsed = CreateMemberSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const emailInUse = await db.query.usersTable.findFirst({
         where: { email: parsed.data.email }
@@ -60,13 +61,13 @@ userApp.post("/", async (c) => {
 
 userApp.patch("/bulk-role", async (c) => {
     const admin = c.var.user;
-    if (admin.role !== "admin") throw new HTTPException(403);
+    if (admin.role !== "admin") throw new HTTPException(403, { message: "Only admins can change member roles" });
 
     const db = c.get("db");
     const body = await c.req.json();
 
     const parsed = BulkRoleUpdateSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const { password, ...columns } = getTableColumns(usersTable);
     const updatedMembers = await db
@@ -84,13 +85,13 @@ userApp.patch("/bulk-role", async (c) => {
 
 userApp.post("/bulk-delete", async (c) => {
     const admin = c.var.user;
-    if (admin.role !== "admin") throw new HTTPException(403);
+    if (admin.role !== "admin") throw new HTTPException(403, { message: "Only admins can delete members" });
 
     const db = c.get("db");
     const body = await c.req.json();
 
     const parsed = BulkDeleteSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const { password, ...columns } = getTableColumns(usersTable);
     const deletedMembers = await db
@@ -107,14 +108,14 @@ userApp.post("/bulk-delete", async (c) => {
 
 userApp.put("/:id{[0-9]+}", async (c) => {
     const admin = c.var.user;
-    if (admin.role !== "admin") throw new HTTPException(403);
+    if (admin.role !== "admin") throw new HTTPException(403, { message: "Only admins can edit members" });
 
     const memberId = Number(c.req.param("id"));
     const db = c.get("db");
     const body = await c.req.json();
 
     const parsed = UpdateMemberSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const target = await db.query.usersTable.findFirst({
         where: { id: memberId, clubId: admin.club.id }
@@ -144,7 +145,7 @@ userApp.put("/:id{[0-9]+}", async (c) => {
 
 userApp.delete("/:id{[0-9]+}", async (c) => {
     const admin = c.var.user;
-    if (admin.role !== "admin") throw new HTTPException(403);
+    if (admin.role !== "admin") throw new HTTPException(403, { message: "Only admins can delete members" });
 
     const memberId = Number(c.req.param("id"));
     const db = c.get("db");
