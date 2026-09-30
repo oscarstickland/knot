@@ -125,6 +125,29 @@ describe("Database Integration Test", () => {
         expect(event?.expectedAttendees).toBe(150);
     });
 
+    it.each(["admin", "exec"])("defaults attendance to closed when %s creates an event", async (role) => {
+        const app = await harness.setupApp();
+        const club = await harness.setupClub("Club");
+        const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+
+        const res = await app.request("/api/events", {
+            method: "POST",
+            headers: { cookie },
+            body: JSON.stringify({
+                name: "Hello",
+                location: "Main Hall",
+                start: new Date(),
+                end: new Date(Date.now() + 5000),
+            })
+        });
+        expect(res.status).toBe(201);
+
+        const event = await harness.db.query.eventsTable.findFirst({
+            where: { name: "Hello", clubId: club.id }
+        });
+        expect(event?.attendanceOpen).toBe(false);
+    });
+
     it.each(["", null])("treats %p as no expected attendees when creating an event", async (expectedAttendees) => {
         const app = await harness.setupApp();
         const club = await harness.setupClub("Club");
