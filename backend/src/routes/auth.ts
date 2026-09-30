@@ -26,7 +26,11 @@ authApp.post("/login", zValidator("json", LoginFormSchema), async (c) => {
     if (!user) return c.json({ message: "Incorrect email or password" }, 401);
 
     // Check password
-    if (!(await verifyPassword(data.password, user.password))) 
+    if (!(await verifyPassword(data.password, user.password)))
+        return c.json({ message: "Incorrect email or password" }, 401);
+
+    // Offboarded users cannot log in
+    if (user.status === "offboarded")
         return c.json({ message: "Incorrect email or password" }, 401);
 
     // Create JWT
