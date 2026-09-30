@@ -2,8 +2,11 @@ import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import {
+    budgetCategoriesTable,
     clubsTable,
+    eventBudgetsTable,
     eventsTable,
+    expensesTable,
     relations,
     taskAssignmentsTable,
     taskAuditLogTable,
@@ -148,6 +151,49 @@ async function generateData() {
         action: "created",
         changes: task1
     });
+
+    console.log("-- Inserting Budget Categories");
+    const [venueCategory, cateringCategory, marketingCategory, equipmentCategory] = await db
+        .insert(budgetCategoriesTable)
+        .values([
+            { clubId: insertedClub1!.id, name: "Venue" },
+            { clubId: insertedClub1!.id, name: "Catering" },
+            { clubId: insertedClub1!.id, name: "Marketing" },
+            { clubId: insertedClub1!.id, name: "Equipment" }
+        ])
+        .returning();
+
+    console.log("-- Inserting Event Budgets");
+    await db.insert(eventBudgetsTable).values([
+        { eventId: insertedEvent1!.id, categoryId: venueCategory!.id, allocatedAmount: 500 },
+        { eventId: insertedEvent1!.id, categoryId: cateringCategory!.id, allocatedAmount: 300 },
+        { eventId: insertedEvent1!.id, categoryId: marketingCategory!.id, allocatedAmount: 150 }
+    ]);
+
+    console.log("-- Inserting Expenses");
+    await db.insert(expensesTable).values([
+        {
+            eventId: insertedEvent1!.id,
+            categoryId: venueCategory!.id,
+            amount: 480,
+            description: "Hall booking deposit",
+            createdBy: insertedUser1!.id
+        },
+        {
+            eventId: insertedEvent1!.id,
+            categoryId: cateringCategory!.id,
+            amount: 320,
+            description: "Catering for open day",
+            createdBy: insertedUser2!.id
+        },
+        {
+            eventId: insertedEvent1!.id,
+            categoryId: marketingCategory!.id,
+            amount: 60,
+            description: "Printed flyers",
+            createdBy: insertedUser2!.id
+        }
+    ]);
 
     await pool.end();
 }
