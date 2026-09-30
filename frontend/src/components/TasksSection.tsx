@@ -57,7 +57,7 @@ export function TasksSection(props: { eventId: number }) {
     const memberById = new Map((members ?? []).map((member) => [member.id, member]));
 
     if (error) {
-        return <Result status="error" title="Retrieval Error" subTitle="Unable to fetch tasks." />
+        return <Result status="error" title="Retrieval Error" subTitle="Something went wrong loading tasks for this event. Try refreshing the page." />
     }
 
     return <div>
