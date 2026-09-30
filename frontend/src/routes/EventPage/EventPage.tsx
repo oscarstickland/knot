@@ -1,4 +1,4 @@
-import {Button, Layout, Result, Space, Spin, Tag, theme, Typography, notification} from "antd";
+import {Button, Layout, Result, Space, Spin, Tag, theme, Typography, notification, type TabsProps, Tabs} from "antd";
 import {useParams} from "react-router";
 import useSWR, {mutate} from "swr";
 import {type ClubEvent, UpdateEventSchema} from "@knot/backend/events";
@@ -10,6 +10,12 @@ import {AxiosInstance} from "@/lib/fetcher.tsx";
 import type {AxiosError} from "axios";
 import {useUser} from "@/lib/auth.tsx";
 import {InboxOutlined} from "@ant-design/icons";
+import { OverviewTab } from "./OverviewTab";
+import { TasksTab } from "./TasksTab";
+import { BudgetTab } from "./BudgetTab";
+import { AttendanceTab } from "./AttendanceTab";
+import { DocumentsTab } from "./DocumentsTab";
+import { useAppNotification } from "@/lib/useAppNotification";
 
 const { Text, Title } = Typography;
 dayjs.extend(relativeTime);
@@ -36,11 +42,11 @@ export function EventPage() {
 function EventInformation(props: { id: string }) {
     const { token } = theme.useToken();
     const user = useUser();
-    const [api, contextHolder] = notification.useNotification();
+    const [api, contextHolder] = useAppNotification();
     const { data, error, isLoading } = useSWR<ClubEvent, AxiosError>(props.id ? `/events/${props.id}` : null);
 
     if (isLoading) return <Spin />
-    if (error) {
+    if (error || !data) {
         return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: "100%" }}>
             <Result
                 status="error"
@@ -71,6 +77,34 @@ function EventInformation(props: { id: string }) {
             });
     }
 
+    const items: TabsProps["items"] = [
+        {
+            key: "overview",
+            label: "Overview",
+            children: <OverviewTab />
+        },
+        {
+            key: "tasks",
+            label: "Tasks",
+            children: <TasksTab event={data} />
+        },
+        {
+            key: "budget",
+            label: "Budget",
+            children: <BudgetTab />
+        },
+        {
+            key: "attendance",
+            label: "Attendance",
+            children: <AttendanceTab event={data} />
+        },
+        {
+            key: "documents",
+            label: "Documents",
+            children: <DocumentsTab />
+        }
+    ]
+
     return <>
         {contextHolder}
         <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -81,8 +115,18 @@ function EventInformation(props: { id: string }) {
                 </Space>
                 <br />
                 <Text style={{ color: token.colorTextSecondary }}>
-                    From <strong>{start.format("dddd D MMMM YYYY [at] h:mm A")}</strong> to
-                    {" "}   <strong>{end.format("dddd D MMMM YYYY [at] h:mm A")}</strong>
+                    { start.isSame(end, "day")
+                        ? <>
+                            <strong>{start.format("D MMM YYYY")}</strong>
+                            {", "}
+                            <strong>{start.format("h:mma")} - {end.format("h:mma")}</strong>
+                        </>
+                        : <>
+                            From <strong>{start.format("dddd D MMMM YYYY [at] h:mm A")}</strong> to
+                            {" "}   <strong>{end.format("dddd D MMMM YYYY [at] h:mm A")}</strong>
+                        </>
+                    }
+                    <span> • {data.location}</span>
                 </Text>
             </div>
 
@@ -97,7 +141,7 @@ function EventInformation(props: { id: string }) {
             }
         </div>
 
-        <TasksSection eventId={data.id} />
+        <Tabs items={items} style={{ paddingTop: "1em" }} />
     </>
 }
 

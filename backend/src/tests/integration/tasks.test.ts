@@ -30,7 +30,7 @@ describe("Task Integration Test", () => {
         const referenceDate = new Date();
         const [event] = await harness.db
             .insert(eventsTable)
-            .values({ name: "Event", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId })
+            .values({ name: "Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId })
             .returning();
         if (!event) throw new Error("Event returned is null");
         return event;

@@ -1,15 +1,16 @@
 import { useState } from "react";
-import { Button, Form, Input, Modal, Select, notification } from "antd";
+import { Button, Form, Input, Modal, Select } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
 import { mutate } from "swr";
 import { CreateMemberSchema, type CreateMemberData } from "@knot/backend/user";
+import { useAppNotification } from "@/lib/useAppNotification";
 
 export function CreateMemberModal() {
     const [open, setOpen] = useState(false);
-    const [api, contextHolder] = notification.useNotification();
+    const [api, contextHolder] = useAppNotification();
 
     const { handleSubmit, formState: { errors }, control, reset } = useForm<CreateMemberData>({
         resolver: zodResolver(CreateMemberSchema),

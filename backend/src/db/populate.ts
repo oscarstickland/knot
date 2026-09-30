@@ -72,6 +72,7 @@ async function generateData() {
     console.log("-- Inserting Events");
     const event1: typeof eventsTable.$inferInsert = {
         name: "MAC Open Day",
+        location: "Student Union Building",
         clubId: insertedClub1!.id,
         start: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
         end: new Date(Date.now() + 3.1 * 24 * 60 * 60 * 1000)
@@ -80,6 +81,7 @@ async function generateData() {
 
     const event2: typeof eventsTable.$inferInsert = {
         name: "MACathon",
+        location: "Engineering Building, Room 201",
         clubId: insertedClub1!.id,
         start: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
         end: new Date(Date.now() + 5.1 * 24 * 60 * 60 * 1000)
@@ -88,6 +90,7 @@ async function generateData() {
 
     const event3: typeof eventsTable.$inferInsert = {
         name: "Welcome BBQ",
+        location: "Main Oval",
         clubId: insertedClub1!.id,
         start: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
         end: new Date(Date.now() - 9.9 * 24 * 60 * 60 * 1000),

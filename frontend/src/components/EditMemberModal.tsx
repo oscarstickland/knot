@@ -6,6 +6,7 @@ import { AxiosInstance } from "@/lib/fetcher.tsx";
 import { mutate } from "swr";
 import { z } from "zod";
 import { UpdateMemberSchema, type ClubMember } from "@knot/backend/user";
+import { useAppNotification } from "@/lib/useAppNotification";
 
 const EditMemberFormSchema = UpdateMemberSchema.extend({
     password: z.union([z.literal(""), UpdateMemberSchema.shape.password])
@@ -19,7 +20,7 @@ interface EditMemberModalProps {
 }
 
 export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
-    const [api, contextHolder] = notification.useNotification();
+    const [api, contextHolder] = useAppNotification();
 
     const { handleSubmit, formState: { errors }, control } = useForm<EditMemberFormData>({
         resolver: zodResolver(EditMemberFormSchema),
