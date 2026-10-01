@@ -4,6 +4,7 @@ metadata:
   name: knot-web
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   ingressClassName: traefik
   tls:
