@@ -75,13 +75,17 @@ export const AppShell: React.FC = () => {
         <Layout style={{minHeight: "100vh"}}>
             <Sider
                 width={250}
-                style={{ 
+                style={{
                     background: token.colorBgContainer,
                     borderRight: "1px solid",
-                    borderColor: token.colorBorderSecondary
+                    borderColor: token.colorBorderSecondary,
+                    position: "sticky",
+                    top: 0,
+                    height: "100vh",
+                    overflow: "auto"
                 }}
             >
-                <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+                <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
                     <div style={{ 
                         display: "flex", 
                         alignItems: "center",
