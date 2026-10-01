@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
+      contents: read
       packages: write
 
     steps:
@@ -58,14 +58,3 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.sha }}
             ghcr.io/${{ github.repository }}:latest
-
-      - name: Bump image tag for ArgoCD (GitOps commit)
-        run: |
-          cd deploy/overlays/prod
-          npx --yes kustomize@5.4.3 edit set image \
-            ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.sha }}
-          cd -
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -am "chore(deploy): bump image to ${{ steps.meta.outputs.sha }}" || echo "nothing to commit"
-          git push
