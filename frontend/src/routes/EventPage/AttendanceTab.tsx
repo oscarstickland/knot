@@ -67,70 +67,71 @@ export function AttendanceTab(props: { event: ClubEvent, active: boolean }) {
         image.src = svgUrl;
     }
 
-    return <div style={{ display: "flex", gap: "1.5em", alignItems: "flex-start" }}>
+    return <Row gutter={[24, 24]}>
         {contextHolder}
-        <Card style={{ flex: "1 1 33%", minWidth: 0 }}>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-                <Space align="center" style={{ marginBottom: 0 }}>
-                    <Title level={4} style={{ margin: 0 }}>Check-in code</Title>
-                    <Tag color={props.event.attendanceOpen ? "success" : "error"}>
-                        {props.event.attendanceOpen ? "Attendance Open" : "Attendance Closed"}
-                    </Tag>
-                </Space>
-                <Text type="secondary">
-                    Project this at the door. Attendees scan it and fill in the attendance form - no app or account needed.
-                </Text>
+        <Col xs={24} lg={8}>
+            <Card>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                    <Space align="center" wrap style={{ marginBottom: 0 }}>
+                        <Title level={4} style={{ margin: 0 }}>Check-in code</Title>
+                        <Tag color={props.event.attendanceOpen ? "success" : "error"}>
+                            {props.event.attendanceOpen ? "Attendance Open" : "Attendance Closed"}
+                        </Tag>
+                    </Space>
+                    <Text type="secondary">
+                        Project this at the door. Attendees scan it and fill in the attendance form - no app or account needed.
+                    </Text>
 
-                <div
-                    ref={qrContainerRef}
-                    style={{
-                        marginTop: "1.5em",
+                    <div
+                        ref={qrContainerRef}
+                        style={{
+                            marginTop: "1.5em",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "1.5em",
+                            background: token.colorBgLayout,
+                            borderRadius: token.borderRadiusLG
+                        }}
+                    >
+                        <QRCode value={checkInUrl} size={180} />
+                    </div>
+
+                    <Button
+                        icon={<DownloadOutlined />}
+                        onClick={downloadPng}
+                        block
+                        style={{ marginTop: "0.75em" }}
+                    >
+                        Download PNG
+                    </Button>
+
+                    <div style={{
+                        marginTop: "1em",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "center",
-                        padding: "1.5em",
-                        background: token.colorBgLayout,
-                        borderRadius: token.borderRadiusLG
-                    }}
-                >
-                    <QRCode value={checkInUrl} size={180} />
+                        gap: "0.25em",
+                        padding: "0.35em 0.35em 0.35em 1em",
+                        background: token.colorFillTertiary,
+                        borderRadius: 999,
+                        minWidth: 0
+                    }}>
+                        <Text
+                            title={checkInUrl}
+                            ellipsis
+                            style={{ flex: 1, minWidth: 0, fontSize: token.fontSizeSM }}
+                        >
+                            {checkInUrl}
+                        </Text>
+                        <Button type="text" shape="circle" size="small" icon={<CopyOutlined />} onClick={copyUrl} />
+                    </div>
                 </div>
+            </Card>
+        </Col>
 
-                <Button
-                    icon={<DownloadOutlined />}
-                    onClick={downloadPng}
-                    block
-                    style={{ marginTop: "0.75em" }}
-                >
-                    Download PNG
-                </Button>
-
-                <div style={{
-                    marginTop: "1em",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.25em",
-                    padding: "0.35em 0.35em 0.35em 1em",
-                    background: token.colorFillTertiary,
-                    borderRadius: 999,
-                    minWidth: 0
-                }}>
-                    <Text
-                        title={checkInUrl}
-                        ellipsis
-                        style={{ flex: 1, minWidth: 0, fontSize: token.fontSizeSM }}
-                    >
-                        {checkInUrl}
-                    </Text>
-                    <Button type="text" shape="circle" size="small" icon={<CopyOutlined />} onClick={copyUrl} />
-                </div>
-            </div>
-            
-        </Card>
-
-        <div style={{ flex: "2 1 66%", display: "flex", flexDirection: "column", gap: "1.5em" }}>
-            <Row gutter={16} align="stretch">
-                <Col span={16}>
+        <Col xs={24} lg={16}>
+            <Row gutter={[16, 16]} align="stretch">
+                <Col xs={24} sm={16}>
                     <Card size="small" style={{ height: "100%" }} styles={{ body: { textAlign: "center" } }}>
                         <Statistic
                             title="Checked in"
@@ -149,7 +150,7 @@ export function AttendanceTab(props: { event: ClubEvent, active: boolean }) {
                         }
                     </Card>
                 </Col>
-                <Col span={8}>
+                <Col xs={24} sm={8}>
                     <Card size="small" style={{ height: "100%" }} styles={{ body: { textAlign: "center" } }}>
                         <Statistic
                             title="Last Check-In"
@@ -166,7 +167,7 @@ export function AttendanceTab(props: { event: ClubEvent, active: boolean }) {
                 </Col>
             </Row>
 
-            <Card title="Recent Check Ins" styles={{ body: { padding: checkInsError ? undefined : 0 } }}>
+            <Card title="Recent Check Ins" style={{ marginTop: 16 }} styles={{ body: { padding: checkInsError ? undefined : 0 } }}>
                 {checkInsError
                     ? <Alert type="error" showIcon title="Unable to load check-ins." />
                     : <ConfigProvider theme={{ components: { Table: { headerBorderRadius: 0 } } }}>
@@ -174,6 +175,7 @@ export function AttendanceTab(props: { event: ClubEvent, active: boolean }) {
                             rowKey="id"
                             loading={checkInsLoading}
                             dataSource={checkIns ?? []}
+                            scroll={{ x: true }}
                             pagination={{
                                 showSizeChanger: true,
                                 pageSizeOptions: [10, 20, 50, 100],
@@ -193,6 +195,6 @@ export function AttendanceTab(props: { event: ClubEvent, active: boolean }) {
                     </ConfigProvider>
                 }
             </Card>
-        </div>
-    </div>
+        </Col>
+    </Row>
 }
