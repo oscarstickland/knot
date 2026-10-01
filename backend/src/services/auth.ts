@@ -73,6 +73,10 @@ export async function fetchCurrentUserData(tokenData: JWTUserData, db: NodePgDat
         throw new HTTPException(401);
     }
 
+    if (user.status === "offboarded") {
+        throw new HTTPException(401);
+    }
+
     return {
         id: user.id,
         name: user.name,

@@ -9,6 +9,7 @@ import {HTTPException} from "hono/http-exception";
 import { tasksApp } from "./routes/tasks.ts";
 import { logger } from "hono/logger";
 import { eventAttendanceApp } from "./routes/event-attendance.ts";
+import { budgetApp } from "./routes/budget.ts";
 
 export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabase) {
     const app = new Hono();
@@ -33,6 +34,7 @@ export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabas
     app.route("/api/events", eventsApp);
     app.route("/api/attendance", eventAttendanceApp);
     app.route("/api/tasks", tasksApp);
+    app.route("/api/budget", budgetApp);
     app.all("/api/*", (c) => { throw new HTTPException(404) });
 
     // Serve the frontend
