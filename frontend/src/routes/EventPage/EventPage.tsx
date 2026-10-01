@@ -1,4 +1,5 @@
 import {Button, Layout, Result, Space, Spin, Tag, theme, Typography, notification, type TabsProps, Tabs} from "antd";
+import {useState} from "react";
 import {useParams} from "react-router";
 import useSWR, {mutate} from "swr";
 import {type ClubEvent, UpdateEventSchema} from "@knot/backend/events";
@@ -9,7 +10,7 @@ import {TasksSection} from "@/components/TasksSection.tsx";
 import {AxiosInstance} from "@/lib/fetcher.tsx";
 import type {AxiosError} from "axios";
 import {useUser} from "@/lib/auth.tsx";
-import {InboxOutlined} from "@ant-design/icons";
+import {InboxOutlined, LockOutlined, UnlockOutlined} from "@ant-design/icons";
 import { OverviewTab } from "./OverviewTab";
 import { TasksTab } from "./TasksTab";
 import { BudgetTab } from "./BudgetTab";
@@ -43,6 +44,7 @@ function EventInformation(props: { id: string }) {
     const { token } = theme.useToken();
     const user = useUser();
     const [api, contextHolder] = useAppNotification();
+    const [activeTab, setActiveTab] = useState("overview");
     const { data, error, isLoading } = useSWR<ClubEvent, AxiosError>(props.id ? `/events/${props.id}` : null);
 
     if (isLoading) return <Spin />
@@ -77,6 +79,22 @@ function EventInformation(props: { id: string }) {
             });
     }
 
+    const toggleAttendanceOpen = () => {
+        AxiosInstance.patch(`/events/${data.id}/attendance`, { attendanceOpen: !data.attendanceOpen })
+            .then(async () => {
+                await mutate(`/events/${data.id}`);
+                api["success"]({
+                    title: "Success",
+                    description: `Attendance has been ${data.attendanceOpen ? "closed" : "opened"}.`
+                });
+            })
+            .catch((err) => {
+                const message = err?.response?.data?.message
+                    ?? `Attendance could not be ${data.attendanceOpen ? "closed" : "opened"}.`;
+                api["error"]({ title: "Error", description: message });
+            });
+    }
+
     const items: TabsProps["items"] = [
         {
             key: "overview",
@@ -91,12 +109,12 @@ function EventInformation(props: { id: string }) {
         {
             key: "budget",
             label: "Budget",
-            children: <BudgetTab />
+            children: <BudgetTab event={data} />
         },
         {
             key: "attendance",
             label: "Attendance",
-            children: <AttendanceTab event={data} />
+            children: <AttendanceTab event={data} active={activeTab === "attendance"} />
         },
         {
             key: "documents",
@@ -132,6 +150,12 @@ function EventInformation(props: { id: string }) {
 
             { isEventManager
                 ? <Space>
+                    <Button
+                        icon={data.attendanceOpen ? <LockOutlined /> : <UnlockOutlined />}
+                        onClick={toggleAttendanceOpen}
+                    >
+                        {data.attendanceOpen ? "Close Attendance" : "Open Attendance"}
+                    </Button>
                     <Button icon={<InboxOutlined />} onClick={toggleArchived}>
                         {data.archived ? "Unarchive" : "Archive"}
                     </Button>
@@ -141,7 +165,7 @@ function EventInformation(props: { id: string }) {
             }
         </div>
 
-        <Tabs items={items} style={{ paddingTop: "1em" }} />
+        <Tabs items={items} activeKey={activeTab} onChange={setActiveTab} style={{ paddingTop: "1em" }} />
     </>
 }
 

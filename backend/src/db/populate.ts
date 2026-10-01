@@ -2,8 +2,11 @@ import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import {
+    budgetCategoriesTable,
     clubsTable,
+    eventBudgetsTable,
     eventsTable,
+    expensesTable,
     relations,
     taskAssignmentsTable,
     taskAuditLogTable,
@@ -68,6 +71,16 @@ async function generateData() {
         clubId: insertedClub1!.id
     };
     const [insertedUser3] = await db.insert(usersTable).values(user3).returning();
+
+    const user4: typeof usersTable.$inferInsert = {
+        name: "Priya Nair",
+        email: "offboarded@gmail.com",
+        password: await hashPassword("password"),
+        role: "standard",
+        status: "offboarded",
+        clubId: insertedClub1!.id
+    };
+    const [insertedUser4] = await db.insert(usersTable).values(user4).returning();
 
     console.log("-- Inserting Events");
     const event1: typeof eventsTable.$inferInsert = {
@@ -140,6 +153,12 @@ async function generateData() {
         url: "https://example.com/venue-contract.pdf",
         addedBy: insertedUser1!.id
     });
+    // Added before this member was offboarded - stays attributed to them.
+    await db.insert(taskDocumentsTable).values({
+        taskId: insertedTask2!.id,
+        url: "https://example.com/invite-draft.pdf",
+        addedBy: insertedUser4!.id
+    });
 
     console.log("-- Inserting Task Audit Log");
     await db.insert(taskAuditLogTable).values({
@@ -148,6 +167,49 @@ async function generateData() {
         action: "created",
         changes: task1
     });
+
+    console.log("-- Inserting Budget Categories");
+    const [venueCategory, cateringCategory, marketingCategory, equipmentCategory] = await db
+        .insert(budgetCategoriesTable)
+        .values([
+            { clubId: insertedClub1!.id, name: "Venue" },
+            { clubId: insertedClub1!.id, name: "Catering" },
+            { clubId: insertedClub1!.id, name: "Marketing" },
+            { clubId: insertedClub1!.id, name: "Equipment" }
+        ])
+        .returning();
+
+    console.log("-- Inserting Event Budgets");
+    await db.insert(eventBudgetsTable).values([
+        { eventId: insertedEvent1!.id, categoryId: venueCategory!.id, allocatedAmount: 500 },
+        { eventId: insertedEvent1!.id, categoryId: cateringCategory!.id, allocatedAmount: 300 },
+        { eventId: insertedEvent1!.id, categoryId: marketingCategory!.id, allocatedAmount: 150 }
+    ]);
+
+    console.log("-- Inserting Expenses");
+    await db.insert(expensesTable).values([
+        {
+            eventId: insertedEvent1!.id,
+            categoryId: venueCategory!.id,
+            amount: 480,
+            description: "Hall booking deposit",
+            createdBy: insertedUser1!.id
+        },
+        {
+            eventId: insertedEvent1!.id,
+            categoryId: cateringCategory!.id,
+            amount: 320,
+            description: "Catering for open day",
+            createdBy: insertedUser2!.id
+        },
+        {
+            eventId: insertedEvent1!.id,
+            categoryId: marketingCategory!.id,
+            amount: 60,
+            description: "Printed flyers",
+            createdBy: insertedUser2!.id
+        }
+    ]);
 
     await pool.end();
 }

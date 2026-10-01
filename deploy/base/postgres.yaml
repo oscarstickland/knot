@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: knot-postgres-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: knot-postgres
+  labels:
+    app: knot-postgres
+spec:
+  replicas: 1 # single-writer PVC (ReadWriteOnce), do not scale
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate # avoid two pods mounting the same RWO volume during rollout
+  selector:
+    matchLabels:
+      app: knot-postgres
+  template:
+    metadata:
+      labels:
+        app: knot-postgres
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: POSTGRES_DB
+              value: knot
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: knot-postgres-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: knot-postgres-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: run
+              mountPath: /var/run/postgresql
+          readinessProbe:
+            exec:
+              command: ['sh', '-c', 'pg_isready -h /var/run/postgresql -U "$POSTGRES_USER"']
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ['sh', '-c', 'pg_isready -h /var/run/postgresql -U "$POSTGRES_USER"']
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: knot-postgres-data
+        - name: run
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: knot-postgres
+spec:
+  selector:
+    app: knot-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

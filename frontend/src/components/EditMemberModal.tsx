@@ -1,5 +1,5 @@
 import { Button, Form, Input, Modal, Popconfirm, Select, notification } from "antd";
-import { DeleteOutlined } from "@ant-design/icons";
+import { UserDeleteOutlined } from "@ant-design/icons";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
@@ -58,18 +58,21 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
             });
     }
 
-    const deleteMember = () => {
-        AxiosInstance.delete(`/user/${member.id}`)
-            .then(async () => {
+    const offboardMember = () => {
+        AxiosInstance.post(`/user/${member.id}/offboard`)
+            .then(async ({ data }: { data: { unassignedTasks: { id: number, title: string }[] } }) => {
                 await mutate("/user");
                 onClose();
+                const taskNote = data.unassignedTasks.length > 0
+                    ? ` ${data.unassignedTasks.length} task(s) are now unassigned and need a new owner.`
+                    : "";
                 api['success']({
                     title: "Success",
-                    description: "Member has been deleted."
+                    description: `${member.name} has been offboarded.${taskNote}`
                 });
             })
             .catch((error) => {
-                const message = error?.response?.data?.message ?? "Member could not be deleted.";
+                const message = error?.response?.data?.message ?? "Member could not be offboarded.";
                 api['error']({
                     title: "Error",
                     description: message
@@ -88,13 +91,13 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
             footer={(_, { OkBtn, CancelBtn }) => (
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <Popconfirm
-                        title="Delete member"
-                        description={`Are you sure you want to delete ${member.name}?`}
-                        onConfirm={deleteMember}
-                        okText="Delete"
+                        title="Offboard member"
+                        description={`Offboard ${member.name}? They'll be unassigned from any active tasks and won't be able to log in. Their task history is kept.`}
+                        onConfirm={offboardMember}
+                        okText="Offboard"
                         okButtonProps={{ danger: true }}
                     >
-                        <Button danger icon={<DeleteOutlined />}>Delete</Button>
+                        <Button danger icon={<UserDeleteOutlined />}>Offboard</Button>
                     </Popconfirm>
                     <div style={{ display: "flex", gap: "8px" }}>
                         <CancelBtn />

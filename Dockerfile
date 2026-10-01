@@ -30,9 +30,15 @@ COPY backend/package.json ./backend/package.json
 
 RUN cd backend && bun install --production --frozen-lockfile
 
-COPY backend ./backend/
-COPY --from=frontend-builder /src/frontend/dist backend/dist
+RUN addgroup -S knot && adduser -S knot -G knot
+
+COPY --chown=knot:knot backend ./backend/
+COPY --chown=knot:knot --from=frontend-builder /src/frontend/dist backend/dist
+
+USER knot
 
 WORKDIR /src/backend
+
+EXPOSE 3000
 
 CMD ["bun", "src/index.ts"]

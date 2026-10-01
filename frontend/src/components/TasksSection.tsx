@@ -41,7 +41,7 @@ export function TasksSection(props: { eventId: number }) {
     const [openTaskId, setOpenTaskId] = useState<number | null>(null);
 
     if (error) {
-        return <Result status="error" title="Retrieval Error" subTitle="Unable to fetch tasks." />
+        return <Result status="error" title="Retrieval Error" subTitle="Something went wrong loading tasks for this event. Try refreshing the page." />
     }
 
     return <div>
