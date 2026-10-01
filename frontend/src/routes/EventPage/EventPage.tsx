@@ -9,7 +9,7 @@ import {TasksSection} from "@/components/TasksSection.tsx";
 import {AxiosInstance} from "@/lib/fetcher.tsx";
 import type {AxiosError} from "axios";
 import {useUser} from "@/lib/auth.tsx";
-import {InboxOutlined} from "@ant-design/icons";
+import {InboxOutlined, LockOutlined, UnlockOutlined} from "@ant-design/icons";
 import { OverviewTab } from "./OverviewTab";
 import { TasksTab } from "./TasksTab";
 import { BudgetTab } from "./BudgetTab";
@@ -77,6 +77,22 @@ function EventInformation(props: { id: string }) {
             });
     }
 
+    const toggleAttendanceOpen = () => {
+        AxiosInstance.patch(`/events/${data.id}/attendance`, { attendanceOpen: !data.attendanceOpen })
+            .then(async () => {
+                await mutate(`/events/${data.id}`);
+                api["success"]({
+                    title: "Success",
+                    description: `Attendance has been ${data.attendanceOpen ? "closed" : "opened"}.`
+                });
+            })
+            .catch((err) => {
+                const message = err?.response?.data?.message
+                    ?? `Attendance could not be ${data.attendanceOpen ? "closed" : "opened"}.`;
+                api["error"]({ title: "Error", description: message });
+            });
+    }
+
     const items: TabsProps["items"] = [
         {
             key: "overview",
@@ -132,6 +148,12 @@ function EventInformation(props: { id: string }) {
 
             { isEventManager
                 ? <Space>
+                    <Button
+                        icon={data.attendanceOpen ? <LockOutlined /> : <UnlockOutlined />}
+                        onClick={toggleAttendanceOpen}
+                    >
+                        {data.attendanceOpen ? "Close Attendance" : "Open Attendance"}
+                    </Button>
                     <Button icon={<InboxOutlined />} onClick={toggleArchived}>
                         {data.archived ? "Unarchive" : "Archive"}
                     </Button>

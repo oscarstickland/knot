@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Alert, Button, Card, Col, ConfigProvider, notification, Progress, Row, Statistic, Table, theme, Typography, type TableProps } from "antd";
+import { Alert, Button, Card, Col, ConfigProvider, notification, Progress, Row, Space, Statistic, Table, Tag, theme, Typography, type TableProps } from "antd";
 import { CopyOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { ClubEvent } from "@knot/backend/events";
 import type { AttendanceCheckIn, AttendanceSummary } from "@knot/backend/event-attendance";
@@ -66,54 +66,62 @@ export function AttendanceTab(props: { event: ClubEvent }) {
     return <div style={{ display: "flex", gap: "1.5em", alignItems: "flex-start" }}>
         {contextHolder}
         <Card style={{ flex: "1 1 33%", minWidth: 0 }}>
-            <Title level={4} style={{ marginTop: 0 }}>Check-in code</Title>
-            <Text type="secondary">
-                Project this at the door. Attendees scan it and fill in the attendance form - no app or account needed.
-            </Text>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+                <Space align="center" style={{ marginBottom: 0 }}>
+                    <Title level={4} style={{ margin: 0 }}>Check-in code</Title>
+                    <Tag color={props.event.attendanceOpen ? "success" : "error"}>
+                        {props.event.attendanceOpen ? "Attendance Open" : "Attendance Closed"}
+                    </Tag>
+                </Space>
+                <Text type="secondary">
+                    Project this at the door. Attendees scan it and fill in the attendance form - no app or account needed.
+                </Text>
 
-            <div
-                ref={qrContainerRef}
-                style={{
-                    marginTop: "1.5em",
+                <div
+                    ref={qrContainerRef}
+                    style={{
+                        marginTop: "1.5em",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "1.5em",
+                        background: token.colorBgLayout,
+                        borderRadius: token.borderRadiusLG
+                    }}
+                >
+                    <QRCode value={checkInUrl} size={180} />
+                </div>
+
+                <Button
+                    icon={<DownloadOutlined />}
+                    onClick={downloadPng}
+                    block
+                    style={{ marginTop: "0.75em" }}
+                >
+                    Download PNG
+                </Button>
+
+                <div style={{
+                    marginTop: "1em",
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    padding: "1.5em",
-                    background: token.colorBgLayout,
-                    borderRadius: token.borderRadiusLG
-                }}
-            >
-                <QRCode value={checkInUrl} size={180} />
+                    gap: "0.25em",
+                    padding: "0.35em 0.35em 0.35em 1em",
+                    background: token.colorFillTertiary,
+                    borderRadius: 999,
+                    minWidth: 0
+                }}>
+                    <Text
+                        title={checkInUrl}
+                        ellipsis
+                        style={{ flex: 1, minWidth: 0, fontSize: token.fontSizeSM }}
+                    >
+                        {checkInUrl}
+                    </Text>
+                    <Button type="text" shape="circle" size="small" icon={<CopyOutlined />} onClick={copyUrl} />
+                </div>
             </div>
-
-            <Button
-                icon={<DownloadOutlined />}
-                onClick={downloadPng}
-                block
-                style={{ marginTop: "0.75em" }}
-            >
-                Download PNG
-            </Button>
-
-            <div style={{
-                marginTop: "1em",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.25em",
-                padding: "0.35em 0.35em 0.35em 1em",
-                background: token.colorFillTertiary,
-                borderRadius: 999,
-                minWidth: 0
-            }}>
-                <Text
-                    title={checkInUrl}
-                    ellipsis
-                    style={{ flex: 1, minWidth: 0, fontSize: token.fontSizeSM }}
-                >
-                    {checkInUrl}
-                </Text>
-                <Button type="text" shape="circle" size="small" icon={<CopyOutlined />} onClick={copyUrl} />
-            </div>
+            
         </Card>
 
         <div style={{ flex: "2 1 66%", display: "flex", flexDirection: "column", gap: "1.5em" }}>
