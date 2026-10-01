@@ -1,4 +1,5 @@
 import {Button, Layout, Result, Space, Spin, Tag, theme, Typography, notification, type TabsProps, Tabs} from "antd";
+import {useState} from "react";
 import {useParams} from "react-router";
 import useSWR, {mutate} from "swr";
 import {type ClubEvent, UpdateEventSchema} from "@knot/backend/events";
@@ -43,6 +44,7 @@ function EventInformation(props: { id: string }) {
     const { token } = theme.useToken();
     const user = useUser();
     const [api, contextHolder] = useAppNotification();
+    const [activeTab, setActiveTab] = useState("overview");
     const { data, error, isLoading } = useSWR<ClubEvent, AxiosError>(props.id ? `/events/${props.id}` : null);
 
     if (isLoading) return <Spin />
@@ -112,7 +114,7 @@ function EventInformation(props: { id: string }) {
         {
             key: "attendance",
             label: "Attendance",
-            children: <AttendanceTab event={data} />
+            children: <AttendanceTab event={data} active={activeTab === "attendance"} />
         },
         {
             key: "documents",
@@ -163,7 +165,7 @@ function EventInformation(props: { id: string }) {
             }
         </div>
 
-        <Tabs items={items} style={{ paddingTop: "1em" }} />
+        <Tabs items={items} activeKey={activeTab} onChange={setActiveTab} style={{ paddingTop: "1em" }} />
     </>
 }
 

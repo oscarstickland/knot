@@ -10,17 +10,21 @@ import dayjs from "dayjs";
 
 const { Title, Text } = Typography;
 
-export function AttendanceTab(props: { event: ClubEvent }) {
+export function AttendanceTab(props: { event: ClubEvent, active: boolean }) {
     const { token } = theme.useToken();
     const [api, contextHolder] = notification.useNotification();
     const checkInUrl = `${window.location.origin}/attendance/${props.event.slug}/register`;
     const qrContainerRef = useRef<HTMLDivElement>(null);
 
     const { data: summary, error: summaryError, isLoading: summaryLoading } =
-        useSWR<AttendanceSummary, AxiosError>(`/attendance/${props.event.id}/summary`);
+        useSWR<AttendanceSummary, AxiosError>(`/attendance/${props.event.id}/summary`, {
+            refreshInterval: props.active ? 10000 : 0
+        });
 
     const { data: checkIns, error: checkInsError, isLoading: checkInsLoading } =
-        useSWR<AttendanceCheckIn[], AxiosError>(`/attendance/${props.event.id}/check-ins`);
+        useSWR<AttendanceCheckIn[], AxiosError>(`/attendance/${props.event.id}/check-ins`, {
+            refreshInterval: props.active ? 10000 : 0
+        });
 
     const copyUrl = () => {
         navigator.clipboard.writeText(checkInUrl)
