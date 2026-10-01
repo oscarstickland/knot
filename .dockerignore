@@ -1,4 +1,4 @@
-node_modules/
+# patterns are anchored to the build context root, so use **/ to match nested dirs
+**/node_modules
 **/.env
-dist/
-drizzle/
+**/dist
