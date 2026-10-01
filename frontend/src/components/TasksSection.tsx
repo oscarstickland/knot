@@ -61,6 +61,7 @@ export function TasksSection(props: { eventId: number }) {
             loading={isLoading}
             dataSource={tasks ?? []}
             pagination={false}
+            scroll={{ x: "max-content" }}
             locale={{ emptyText: <Empty description="No tasks yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
             onRow={(task) => ({
                 onClick: () => setOpenTaskId(task.id),
@@ -91,6 +92,7 @@ export function TasksSection(props: { eventId: number }) {
                     title: "Priority",
                     dataIndex: "priority",
                     width: 110,
+                    responsive: ["sm"],
                     render: (priority) => <Tag color={priorityColor[priority]}>{priority.toUpperCase()}</Tag>
                 },
                 {
@@ -108,6 +110,7 @@ export function TasksSection(props: { eventId: number }) {
                     key: "dependsOn",
                     title: "Depends On",
                     width: 160,
+                    responsive: ["xl"],
                     render: (_, task) => task.dependsOn.length === 0
                         ? <Text type="secondary">—</Text>
                         : <Space size={[4, 4]} wrap>
@@ -124,6 +127,7 @@ export function TasksSection(props: { eventId: number }) {
                     key: "assignees",
                     title: "Assignees",
                     width: 130,
+                    responsive: ["lg"],
                     render: (_, task) => (
                         <Avatar.Group max={{ count: 3 }}>
                             {task.assignments.map((assignment) => {
@@ -139,6 +143,7 @@ export function TasksSection(props: { eventId: number }) {
                     key: "dueDate",
                     title: "Due",
                     width: 150,
+                    responsive: ["md"],
                     render: (_, task) => task.dueDate
                         ? <Text style={{ color: token.colorTextSecondary }}>{dayjs(task.dueDate).format("D MMM YYYY")}</Text>
                         : <Text type="secondary">—</Text>
