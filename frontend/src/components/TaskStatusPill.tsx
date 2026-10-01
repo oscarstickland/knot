@@ -11,6 +11,12 @@ export const progressColor: Record<string, string> = {
     completed: "green"
 };
 
+export const priorityColor: Record<string, string> = {
+    low: "default",
+    medium: "gold",
+    high: "red"
+};
+
 export function TaskStatusPill(props: { task: Task }) {
     return <Tag color={progressColor[props.task.progress]}>{progressLabel(props.task.progress)}</Tag>
 }
