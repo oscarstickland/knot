@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
     Avatar,
+    Checkbox,
     Empty,
     Result,
     Select,
@@ -67,11 +68,20 @@ export function TasksSection(props: { eventId: number }) {
             })}
             columns={[
                 {
+                    key: "complete",
+                    width: 36,
+                    render: (_, task) => (
+                        <div onClick={(e) => e.stopPropagation()}>
+                            <CompleteCheckbox task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
+                        </div>
+                    )
+                },
+                {
                     key: "title",
                     title: "Task",
                     dataIndex: "title",
                     render: (title, task) => <div>
-                        <Text strong>{title}</Text>
+                        <Text strong delete={task.progress === "completed"}>{title}</Text>
                         <br />
                         <Text type="secondary" style={{ fontSize: "12px" }}>{task.description}</Text>
                     </div>
@@ -151,22 +161,42 @@ export function TasksSection(props: { eventId: number }) {
     </div>
 }
 
-function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
+function useTaskProgress(task: TaskWithRelations, eventId: number) {
     const user = useUser();
     const [api, contextHolder] = useAppNotification();
-    const isAssigned = props.task.assignments.some((assignment) => assignment.userId === user.id);
-    const canEdit = props.isTaskManager || isAssigned;
+    const isAssigned = task.assignments.some((assignment) => assignment.userId === user.id);
 
     const updateProgress = (progress: string) => {
-        AxiosInstance.patch(`/tasks/${props.task.id}/progress`, { progress })
+        AxiosInstance.patch(`/tasks/${task.id}/progress`, { progress })
             .then(async () => {
-                await mutate(`/tasks?eventId=${props.eventId}`);
+                await mutate(`/tasks?eventId=${eventId}`);
             })
             .catch((err) => {
                 const message = err?.response?.data?.message ?? "Task progress could not be updated.";
                 api["error"]({ title: "Error", description: message });
             });
     }
+
+    return { isAssigned, updateProgress, contextHolder };
+}
+
+function CompleteCheckbox(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
+    const { isAssigned, updateProgress, contextHolder } = useTaskProgress(props.task, props.eventId);
+    const canEdit = props.isTaskManager || isAssigned;
+
+    return <>
+        {contextHolder}
+        <Checkbox
+            disabled={!canEdit}
+            checked={props.task.progress === "completed"}
+            onChange={(e) => updateProgress(e.target.checked ? "completed" : "in_progress")}
+        />
+    </>
+}
+
+function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
+    const { isAssigned, updateProgress, contextHolder } = useTaskProgress(props.task, props.eventId);
+    const canEdit = props.isTaskManager || isAssigned;
 
     if (!canEdit) return <>
         {contextHolder}
