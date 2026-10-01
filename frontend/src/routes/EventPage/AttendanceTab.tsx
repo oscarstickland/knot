@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Alert, Button, Card, Col, ConfigProvider, notification, Progress, Row, Statistic, Table, theme, Typography, type TableProps } from "antd";
+import { Alert, Button, Card, Col, ConfigProvider, notification, Progress, Row, Space, Statistic, Table, Tag, theme, Typography, type TableProps } from "antd";
 import { CopyOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { ClubEvent } from "@knot/backend/events";
 import type { AttendanceCheckIn, AttendanceSummary } from "@knot/backend/event-attendance";
@@ -10,17 +10,21 @@ import dayjs from "dayjs";
 
 const { Title, Text } = Typography;
 
-export function AttendanceTab(props: { event: ClubEvent }) {
+export function AttendanceTab(props: { event: ClubEvent, active: boolean }) {
     const { token } = theme.useToken();
     const [api, contextHolder] = notification.useNotification();
     const checkInUrl = `${window.location.origin}/attendance/${props.event.slug}/register`;
     const qrContainerRef = useRef<HTMLDivElement>(null);
 
     const { data: summary, error: summaryError, isLoading: summaryLoading } =
-        useSWR<AttendanceSummary, AxiosError>(`/attendance/${props.event.id}/summary`);
+        useSWR<AttendanceSummary, AxiosError>(`/attendance/${props.event.id}/summary`, {
+            refreshInterval: props.active ? 10000 : 0
+        });
 
     const { data: checkIns, error: checkInsError, isLoading: checkInsLoading } =
-        useSWR<AttendanceCheckIn[], AxiosError>(`/attendance/${props.event.id}/check-ins`);
+        useSWR<AttendanceCheckIn[], AxiosError>(`/attendance/${props.event.id}/check-ins`, {
+            refreshInterval: props.active ? 10000 : 0
+        });
 
     const copyUrl = () => {
         navigator.clipboard.writeText(checkInUrl)
@@ -63,62 +67,71 @@ export function AttendanceTab(props: { event: ClubEvent }) {
         image.src = svgUrl;
     }
 
-    return <div style={{ display: "flex", gap: "1.5em", alignItems: "flex-start" }}>
+    return <Row gutter={[24, 24]}>
         {contextHolder}
-        <Card style={{ flex: "1 1 33%", minWidth: 0 }}>
-            <Title level={4} style={{ marginTop: 0 }}>Check-in code</Title>
-            <Text type="secondary">
-                Project this at the door. Attendees scan it and fill in the attendance form - no app or account needed.
-            </Text>
+        <Col xs={24} lg={8}>
+            <Card>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                    <Space align="center" wrap style={{ marginBottom: 0 }}>
+                        <Title level={4} style={{ margin: 0 }}>Check-in code</Title>
+                        <Tag color={props.event.attendanceOpen ? "success" : "error"}>
+                            {props.event.attendanceOpen ? "Attendance Open" : "Attendance Closed"}
+                        </Tag>
+                    </Space>
+                    <Text type="secondary">
+                        Project this at the door. Attendees scan it and fill in the attendance form - no app or account needed.
+                    </Text>
 
-            <div
-                ref={qrContainerRef}
-                style={{
-                    marginTop: "1.5em",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "1.5em",
-                    background: token.colorBgLayout,
-                    borderRadius: token.borderRadiusLG
-                }}
-            >
-                <QRCode value={checkInUrl} size={180} />
-            </div>
+                    <div
+                        ref={qrContainerRef}
+                        style={{
+                            marginTop: "1.5em",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "1.5em",
+                            background: token.colorBgLayout,
+                            borderRadius: token.borderRadiusLG
+                        }}
+                    >
+                        <QRCode value={checkInUrl} size={180} />
+                    </div>
 
-            <Button
-                icon={<DownloadOutlined />}
-                onClick={downloadPng}
-                block
-                style={{ marginTop: "0.75em" }}
-            >
-                Download PNG
-            </Button>
+                    <Button
+                        icon={<DownloadOutlined />}
+                        onClick={downloadPng}
+                        block
+                        style={{ marginTop: "0.75em" }}
+                    >
+                        Download PNG
+                    </Button>
 
-            <div style={{
-                marginTop: "1em",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.25em",
-                padding: "0.35em 0.35em 0.35em 1em",
-                background: token.colorFillTertiary,
-                borderRadius: 999,
-                minWidth: 0
-            }}>
-                <Text
-                    title={checkInUrl}
-                    ellipsis
-                    style={{ flex: 1, minWidth: 0, fontSize: token.fontSizeSM }}
-                >
-                    {checkInUrl}
-                </Text>
-                <Button type="text" shape="circle" size="small" icon={<CopyOutlined />} onClick={copyUrl} />
-            </div>
-        </Card>
+                    <div style={{
+                        marginTop: "1em",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.25em",
+                        padding: "0.35em 0.35em 0.35em 1em",
+                        background: token.colorFillTertiary,
+                        borderRadius: 999,
+                        minWidth: 0
+                    }}>
+                        <Text
+                            title={checkInUrl}
+                            ellipsis
+                            style={{ flex: 1, minWidth: 0, fontSize: token.fontSizeSM }}
+                        >
+                            {checkInUrl}
+                        </Text>
+                        <Button type="text" shape="circle" size="small" icon={<CopyOutlined />} onClick={copyUrl} />
+                    </div>
+                </div>
+            </Card>
+        </Col>
 
-        <div style={{ flex: "2 1 66%", display: "flex", flexDirection: "column", gap: "1.5em" }}>
-            <Row gutter={16} align="stretch">
-                <Col span={16}>
+        <Col xs={24} lg={16}>
+            <Row gutter={[16, 16]} align="stretch">
+                <Col xs={24} sm={16}>
                     <Card size="small" style={{ height: "100%" }} styles={{ body: { textAlign: "center" } }}>
                         <Statistic
                             title="Checked in"
@@ -137,7 +150,7 @@ export function AttendanceTab(props: { event: ClubEvent }) {
                         }
                     </Card>
                 </Col>
-                <Col span={8}>
+                <Col xs={24} sm={8}>
                     <Card size="small" style={{ height: "100%" }} styles={{ body: { textAlign: "center" } }}>
                         <Statistic
                             title="Last Check-In"
@@ -154,7 +167,7 @@ export function AttendanceTab(props: { event: ClubEvent }) {
                 </Col>
             </Row>
 
-            <Card title="Recent Check Ins" styles={{ body: { padding: checkInsError ? undefined : 0 } }}>
+            <Card title="Recent Check Ins" style={{ marginTop: 16 }} styles={{ body: { padding: checkInsError ? undefined : 0 } }}>
                 {checkInsError
                     ? <Alert type="error" showIcon title="Unable to load check-ins." />
                     : <ConfigProvider theme={{ components: { Table: { headerBorderRadius: 0 } } }}>
@@ -162,6 +175,7 @@ export function AttendanceTab(props: { event: ClubEvent }) {
                             rowKey="id"
                             loading={checkInsLoading}
                             dataSource={checkIns ?? []}
+                            scroll={{ x: true }}
                             pagination={{
                                 showSizeChanger: true,
                                 pageSizeOptions: [10, 20, 50, 100],
@@ -181,6 +195,6 @@ export function AttendanceTab(props: { event: ClubEvent }) {
                     </ConfigProvider>
                 }
             </Card>
-        </div>
-    </div>
+        </Col>
+    </Row>
 }
