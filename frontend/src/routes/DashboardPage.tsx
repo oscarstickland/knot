@@ -4,7 +4,7 @@ import { useUser } from "@/lib/auth.tsx";
 import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";
 import useSWR from "swr";
-import type { ClubEvent } from "@knot/backend/events";
+import type { ClubEventWithTaskProgress } from "@knot/backend/events";
 import { Link } from "react-router";
 import { Listy } from 'antd';
 import type { TaskWithRelations } from "@knot/backend/tasks";
@@ -19,7 +19,7 @@ export function DashboardPage() {
     const isEventManager = user.role === "admin" || user.role === "exec";
 
     const currentDate = dayjs().format("dddd, Do MMMM YYYY");
-    const events = useSWR<ClubEvent[]>(`/events?archived=false`);
+    const events = useSWR<ClubEventWithTaskProgress[]>(`/events?archived=false`);
 
     return <Layout style={{ padding: "24px 24px" }}>
         <Layout
@@ -121,7 +121,7 @@ function UpcomingTaskList(props: { tasks: TaskWithRelations[] }) {
 }
 
 function UpcomingEvents() {
-    const events = useSWR<ClubEvent[]>(`/events?archived=false`);
+    const events = useSWR<ClubEventWithTaskProgress[]>(`/events?archived=false`);
     const dataVisible = events.data && events.data.length > 0;
 
     const EmptyEvents = () => {
@@ -141,10 +141,10 @@ function UpcomingEvents() {
     </Card>
 }
 
-function UpcomingEventsList(props: { events: ClubEvent[] }) {
+function UpcomingEventsList(props: { events: ClubEventWithTaskProgress[] }) {
     const { token } = theme.useToken();
 
-    const clubEventRenderer = (event: ClubEvent) => {
+    const clubEventRenderer = (event: ClubEventWithTaskProgress) => {
         const start = dayjs(event.start);
 
         return <Link to={`/app/events/${event.id}`} key={event.id}>
@@ -180,12 +180,12 @@ function UpcomingEventsList(props: { events: ClubEvent[] }) {
                     flexDirection: "column",
                 }}>
                     <p style={{ margin: 0, fontSize: token.fontSizeHeading4, fontWeight: token.fontWeightStrong }}>{event.name}</p>
-                    <p style={{ margin: 0, color: token.colorTextSecondary }}>Location · { start.format("H:mm A") }</p>
-                    <p style={{ margin: 0, color: token.colorTextTertiary }}>?/? Tasks</p>
+                    <p style={{ margin: 0, color: token.colorTextSecondary }}>{event.location} · { start.format("H:mm A") }</p>
+                    <p style={{ margin: 0, color: token.colorTextTertiary }}>{event.taskProgress.completed}/{event.taskProgress.total} Tasks</p>
                 </div>
             </div>
         </Link>;
     }
 
-    return <Listy<ClubEvent> items={props.events} rowKey="id" itemRender={clubEventRenderer} style={{ margin: 0 }} styles={{  }} />;
+    return <Listy<ClubEventWithTaskProgress> items={props.events} rowKey="id" itemRender={clubEventRenderer} style={{ margin: 0 }} styles={{  }} />;
 }
