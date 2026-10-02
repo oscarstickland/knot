@@ -1,7 +1,7 @@
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect } from "bun:test";
 import { type TestDatabaseHarness, setupHarness } from "../harness.ts";
 import { budgetCategoriesTable, eventsTable, expensesTable } from "../../db/schema.ts";
-import type { EventBudgetSummary, EventSpending, Expense } from "../../types/budget.ts";
+import type { EventBudgetSummary, EventSpending, Expense, MemberBudgetView } from "../../types/budget.ts";
 
 type HTTPError = {
     message: string
@@ -219,6 +219,29 @@ describe("Budget Integration Test", () => {
             expect(body.expenses.length).toBe(2);
         });
 
+        it("only shows standard users category names and their own expenses", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user: member, cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const category = await setupCategory(event.id, "Venue", 500);
+            await setupExpense(event.id, category.id, admin.id, 120, "Deposit");
+            await setupExpense(event.id, category.id, member.id, 30, "Snacks");
+
+            const res = await app.request(`/api/events/${event.id}/budget`, { headers: { cookie } });
+            expect(res.status).toBe(200);
+            const body = await res.json() as MemberBudgetView & Record<string, unknown>;
+
+            expect(body.scope).toBe("own");
+            expect(body.categories).toEqual([{ id: category.id, name: "Venue" }]);
+            expect(body.expenses.length).toBe(1);
+            expect(body.expenses[0]!.description).toBe("Snacks");
+            expect(body.expenses[0]!.category).toEqual({ id: category.id, name: "Venue" });
+            expect(body.totalAllocated).toBeUndefined();
+            expect(body.totalSpent).toBeUndefined();
+        });
+
         it("does not allow viewing a budget for an event in another club", async () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
@@ -232,19 +255,22 @@ describe("Budget Integration Test", () => {
     });
 
     describe("POST /api/events/:id/expenses (create)", () => {
-        it("prevents standard users from logging an expense", async () => {
+        it("allows standard users to log an expense", async () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const event = await setupEvent(club.id);
             const category = await setupCategory(event.id);
-            const { cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const { user: member, cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
 
             const res = await app.request(`/api/events/${event.id}/expenses`, {
                 method: "POST",
                 headers: { cookie },
                 body: JSON.stringify({ categoryId: category.id, amount: 50, description: "Snacks" })
             });
-            expect(res.status).toBe(403);
+            expect(res.status).toBe(201);
+
+            const created = await harness.db.query.expensesTable.findFirst({ where: { eventId: event.id } });
+            expect(created?.createdBy).toBe(member.id);
         });
 
         it.each(["exec", "admin"])("allows %s to log an expense", async (role) => {
@@ -354,6 +380,49 @@ describe("Budget Integration Test", () => {
 
             const deleted = await harness.db.query.expensesTable.findFirst({ where: { id: expense.id } });
             expect(deleted).toBeUndefined();
+        });
+
+        it("allows a standard user to update and delete their own expense", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: member, cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const category = await setupCategory(event.id);
+            const expense = await setupExpense(event.id, category.id, member.id, 50, "Original");
+
+            const updateRes = await app.request(`/api/budget/expenses/${expense.id}`, {
+                method: "PUT",
+                headers: { cookie },
+                body: JSON.stringify({ categoryId: category.id, amount: 60, description: "Updated" })
+            });
+            expect(updateRes.status).toBe(200);
+            expect((await updateRes.json() as Expense).amount).toBe(60);
+
+            const deleteRes = await app.request(`/api/budget/expenses/${expense.id}`, {
+                method: "DELETE",
+                headers: { cookie }
+            });
+            expect(deleteRes.status).toBe(200);
+        });
+
+        it.each(["PUT", "DELETE"])("prevents a standard user from %s on someone else's expense", async (method) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const category = await setupCategory(event.id);
+            const expense = await setupExpense(event.id, category.id, admin.id, 50);
+
+            const res = await app.request(`/api/budget/expenses/${expense.id}`, {
+                method,
+                headers: { cookie },
+                body: method === "PUT" ? JSON.stringify({ categoryId: category.id, amount: 1, description: "Hijack" }) : undefined
+            });
+            expect(res.status).toBe(404);
+
+            const unchanged = await harness.db.query.expensesTable.findFirst({ where: { id: expense.id } });
+            expect(unchanged?.amount).toBe(50);
         });
     });
 
