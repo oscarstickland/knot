@@ -18,6 +18,7 @@
     "./events": "./src/types/events.ts",
     "./event-attendance": "./src/types/event-attendance.ts",
     "./tasks": "./src/types/tasks.ts",
+    "./task-dependencies": "./src/services/task-dependencies.ts",
     "./user": "./src/types/user.ts"
   },
   "scripts": {
