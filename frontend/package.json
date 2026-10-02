@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "start": "NODE_ENV=production bun src/index.ts"
+    "start": "NODE_ENV=production bun src/index.ts",
+    "test": "bun test tests"
   },
   "dependencies": {
     "@ant-design/icons": "6.x",
