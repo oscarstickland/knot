@@ -10,6 +10,7 @@ import {
     SettingOutlined,
     UserOutlined
 } from "@ant-design/icons";
+import { SupportedByMonashAutomation } from "@/components/SupportedByMonashAutomation.tsx";
 
 const { Sider } = Layout;
 const { Title, Text } = Typography;
@@ -108,6 +109,9 @@ export const AppShell: React.FC = () => {
                         selectedKeys={[location.pathname]}
                         onClick={onMenuClick}
                     />
+                    <div style={{ paddingBottom: "12px" }}>
+                        <SupportedByMonashAutomation />
+                    </div>
                     <div style={{ borderTop: "1px solid", borderColor: token.colorBorderSecondary }}>
                         <CurrentUser />
                     </div>
