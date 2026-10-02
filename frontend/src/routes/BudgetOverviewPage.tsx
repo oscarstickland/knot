@@ -1,6 +1,8 @@
-import { Empty, Layout, Progress, Result, Table, Typography, theme, type TableProps } from "antd";
+import { Empty, Layout, Progress, Result, Space, Table, Tag, Typography, theme, type TableProps } from "antd";
 import useSWR from "swr";
-import type { CategorySpending } from "@knot/backend/budget";
+import dayjs from "dayjs";
+import { Link } from "react-router";
+import type { EventSpending } from "@knot/backend/budget";
 
 const { Title } = Typography;
 
@@ -18,41 +20,52 @@ export function BudgetOverviewPage() {
             }}
         >
             <Title level={2} style={{ margin: 0, marginBottom: "24px" }}>Budget Overview</Title>
-            <SpendingByCategory />
+            <SpendingByEvent />
         </Layout>
     </Layout>
 }
 
-function SpendingByCategory() {
-    const { data, isLoading, error } = useSWR<CategorySpending[]>("/budget/spending");
+function SpendingByEvent() {
+    const { data, isLoading, error } = useSWR<EventSpending[]>("/budget/spending");
 
     if (error) {
         return <Result status="error" title="Retrieval Error" subTitle="Unable to fetch spending data." />
     }
 
-    const columns: TableProps<CategorySpending>['columns'] = [
+    const columns: TableProps<EventSpending>['columns'] = [
         {
             key: "name",
-            title: "Category",
-            dataIndex: "name",
-            sorter: (a, b) => a.name.localeCompare(b.name)
+            title: "Event",
+            sorter: (a, b) => a.name.localeCompare(b.name),
+            render: (_, event) => <Space>
+                <Link to={`/app/events/${event.eventId}`}>{event.name}</Link>
+                {event.archived && <Tag>Archived</Tag>}
+            </Space>
+        },
+        {
+            key: "date",
+            title: "Date",
+            sorter: (a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf(),
+            render: (_, event) => dayjs(event.start).format("D MMM YYYY")
         },
         {
             key: "allocated",
-            title: "Total Allocated",
-            render: (_, category) => currency(category.totalAllocated)
+            title: "Allocated",
+            sorter: (a, b) => a.totalAllocated - b.totalAllocated,
+            render: (_, event) => currency(event.totalAllocated)
         },
         {
             key: "spent",
-            title: "Total Spent",
-            render: (_, category) => currency(category.totalSpent)
+            title: "Spent",
+            sorter: (a, b) => a.totalSpent - b.totalSpent,
+            render: (_, event) => currency(event.totalSpent)
         },
         {
             key: "progress",
             title: "% Used",
-            render: (_, category) => {
-                const percent = category.totalAllocated > 0
-                    ? Math.round((category.totalSpent / category.totalAllocated) * 100)
+            render: (_, event) => {
+                const percent = event.totalAllocated > 0
+                    ? Math.round((event.totalSpent / event.totalAllocated) * 100)
                     : 0;
 
                 return <Progress
@@ -65,14 +78,14 @@ function SpendingByCategory() {
     ];
 
     return <Table
-        rowKey="categoryId"
+        rowKey="eventId"
         loading={isLoading}
         columns={columns}
         dataSource={data ?? []}
         pagination={false}
         locale={{
             emptyText: <Empty
-                description="No budget categories yet. Create one in Admin Settings to start tracking spending."
+                description="No event budgets yet. Add budget categories from an event's Budget tab to start tracking spending."
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
         }}
