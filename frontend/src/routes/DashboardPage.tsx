@@ -4,11 +4,12 @@ import { useUser } from "@/lib/auth.tsx";
 import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";
 import useSWR from "swr";
-import type { ClubEvent } from "@knot/backend/events";
+import type { ClubEventWithTaskProgress } from "@knot/backend/events";
 import { Link } from "react-router";
 import { Listy } from 'antd';
 import type { TaskWithRelations } from "@knot/backend/tasks";
 import { TaskStatusPill } from "@/components/TaskStatusPill.tsx";
+import { pluralise } from "@/lib/pluralise.ts";
 
 const { Text, Title } = Typography;
 dayjs.extend(advancedFormat);
@@ -19,7 +20,7 @@ export function DashboardPage() {
     const isEventManager = user.role === "admin" || user.role === "exec";
 
     const currentDate = dayjs().format("dddd, Do MMMM YYYY");
-    const events = useSWR<ClubEvent[]>(`/events?archived=false`);
+    const events = useSWR<ClubEventWithTaskProgress[]>(`/events?archived=false`);
 
     return <Layout style={{ padding: "24px 24px" }}>
         <Layout
@@ -41,7 +42,7 @@ export function DashboardPage() {
                         margin: "1em 0em",
                         color: token.colorTextSecondary }}
                     >
-                        {currentDate} { events.data ? `· ${events.data.length} active event/s` : "" }
+                        {currentDate} { events.data ? `· ${pluralise(events.data.length, "active event")}` : "" }
                     </p>
                 </div>
 
@@ -61,13 +62,15 @@ export function DashboardPage() {
 }
 
 function UpcomingTasks() {
+    const { token } = theme.useToken();
     const tasks = useSWR<TaskWithRelations[]>("/tasks/me");
 
     const dataVisible = tasks.data && tasks.data.length > 0;
 
     const EmptyTasks = () => {
-        return <div style={{ display: 'flex', alignItems: "center", justifyContent: "center", height: "100%" }}>
-            <p>No Upcoming Tasks</p>
+        return <div style={{ display: 'flex', flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%" }}>
+            <p style={{ margin: 0 }}>No Upcoming Tasks</p>
+            <p style={{ margin: "0.5em 0 0", color: token.colorTextSecondary }}>Assign Yourself to a Task to See it Here</p>
         </div>
     }
 
@@ -121,7 +124,7 @@ function UpcomingTaskList(props: { tasks: TaskWithRelations[] }) {
 }
 
 function UpcomingEvents() {
-    const events = useSWR<ClubEvent[]>(`/events?archived=false`);
+    const events = useSWR<ClubEventWithTaskProgress[]>(`/events?archived=false`);
     const dataVisible = events.data && events.data.length > 0;
 
     const EmptyEvents = () => {
@@ -141,10 +144,10 @@ function UpcomingEvents() {
     </Card>
 }
 
-function UpcomingEventsList(props: { events: ClubEvent[] }) {
+function UpcomingEventsList(props: { events: ClubEventWithTaskProgress[] }) {
     const { token } = theme.useToken();
 
-    const clubEventRenderer = (event: ClubEvent) => {
+    const clubEventRenderer = (event: ClubEventWithTaskProgress) => {
         const start = dayjs(event.start);
 
         return <Link to={`/app/events/${event.id}`} key={event.id}>
@@ -180,12 +183,12 @@ function UpcomingEventsList(props: { events: ClubEvent[] }) {
                     flexDirection: "column",
                 }}>
                     <p style={{ margin: 0, fontSize: token.fontSizeHeading4, fontWeight: token.fontWeightStrong }}>{event.name}</p>
-                    <p style={{ margin: 0, color: token.colorTextSecondary }}>Location · { start.format("H:mm A") }</p>
-                    <p style={{ margin: 0, color: token.colorTextTertiary }}>?/? Tasks</p>
+                    <p style={{ margin: 0, color: token.colorTextSecondary }}>{event.location} · { start.format("H:mm A") }</p>
+                    <p style={{ margin: 0, color: token.colorTextTertiary }}>{event.taskProgress.completed}/{event.taskProgress.total} Tasks</p>
                 </div>
             </div>
         </Link>;
     }
 
-    return <Listy<ClubEvent> items={props.events} rowKey="id" itemRender={clubEventRenderer} style={{ margin: 0 }} styles={{  }} />;
+    return <Listy<ClubEventWithTaskProgress> items={props.events} rowKey="id" itemRender={clubEventRenderer} style={{ margin: 0 }} styles={{  }} />;
 }
