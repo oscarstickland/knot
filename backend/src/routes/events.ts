@@ -5,7 +5,13 @@ import {zValidator} from "@hono/zod-validator";
 import { z } from 'zod';
 import {HTTPException} from "hono/http-exception";
 import {ArchiveEventSchema, SetAttendanceOpenSchema, UpdateEventSchema} from "../types/events.ts";
-import {CreateExpenseSchema, SetEventBudgetSchema} from "../types/budget.ts";
+import {
+    CreateExpenseSchema,
+    SetEventBudgetSchema,
+    type EventBudgetSummary,
+    type ExpenseWithRelations,
+    type MemberBudgetView
+} from "../types/budget.ts";
 import {clubsTable, eventsTable, budgetCategoriesTable, expensesTable} from "../db/schema.ts";
 import {and, eq, inArray} from "drizzle-orm";
 import {describeZodError} from "../types/errors.ts";
@@ -153,16 +159,32 @@ eventsApp.patch("/:id{[0-9]+}/attendance", async (c) => {
     return c.json(updatedEvent);
 });
 
-async function loadEventBudget(db: Db, eventId: number) {
+type ExpenseRow = Awaited<ReturnType<typeof loadExpenses>>[number];
+
+function loadExpenses(db: Db, eventId: number, createdBy?: number) {
+    return db.query.expensesTable.findMany({
+        where: createdBy === undefined ? { eventId } : { eventId, createdBy },
+        with: { category: true, creator: true },
+        orderBy: { id: "asc" }
+    });
+}
+
+function toExpenseWithRelations(expense: ExpenseRow): ExpenseWithRelations {
+    const { category, creator, ...rest } = expense;
+    return {
+        ...rest,
+        category: { id: category!.id, name: category!.name },
+        creator: { id: creator!.id, name: creator!.name }
+    };
+}
+
+async function loadEventBudget(db: Db, eventId: number): Promise<EventBudgetSummary> {
     const [categories, expenses] = await Promise.all([
         db.query.budgetCategoriesTable.findMany({
             where: { eventId },
             orderBy: { id: "asc" }
         }),
-        db.query.expensesTable.findMany({
-            where: { eventId },
-            with: { category: true, creator: true }
-        })
+        loadExpenses(db, eventId)
     ]);
 
     const spentByCategory = new Map<number, number>();
@@ -171,16 +193,31 @@ async function loadEventBudget(db: Db, eventId: number) {
     }
 
     return {
+        scope: "full",
         categories: categories.map((category) => ({
             ...category,
             spent: spentByCategory.get(category.id) ?? 0
         })),
-        expenses: expenses.map((expense) => ({
-            ...expense,
-            creator: { id: expense.creator!.id, name: expense.creator!.name }
-        })),
+        expenses: expenses.map(toExpenseWithRelations),
         totalAllocated: categories.reduce((sum, category) => sum + category.allocatedAmount, 0),
         totalSpent: expenses.reduce((sum, expense) => sum + expense.amount, 0)
+    };
+}
+
+async function loadMemberBudget(db: Db, eventId: number, userId: number): Promise<MemberBudgetView> {
+    const [categories, expenses] = await Promise.all([
+        db.query.budgetCategoriesTable.findMany({
+            where: { eventId },
+            columns: { id: true, name: true },
+            orderBy: { id: "asc" }
+        }),
+        loadExpenses(db, eventId, userId)
+    ]);
+
+    return {
+        scope: "own",
+        categories,
+        expenses: expenses.map(toExpenseWithRelations)
     };
 }
 
@@ -188,13 +225,15 @@ eventsApp.get("/:id{[0-9]+}/budget", async (c) => {
     const eventId = Number(c.req.param("id"));
     const db = c.get("db");
     const user = c.var.user;
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
 
     const event = await db.query.eventsTable.findFirst({
         where: { id: eventId, clubId: user.club.id }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
+    if (!isExecOrAdmin(user.role)) {
+        return c.json(await loadMemberBudget(db, eventId, user.id));
+    }
     return c.json(await loadEventBudget(db, eventId));
 });
 
@@ -273,7 +312,6 @@ eventsApp.post("/:id{[0-9]+}/expenses", async (c) => {
     const eventId = Number(c.req.param("id"));
     const db = c.get("db");
     const user = c.var.user;
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
 
     const body = await c.req.json();
     const parsed = CreateExpenseSchema.safeParse(body);

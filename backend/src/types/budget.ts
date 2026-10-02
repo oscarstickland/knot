@@ -33,17 +33,30 @@ export type Expense = typeof expensesTable.$inferSelect;
 
 export type EventBudgetLine = BudgetCategory & { spent: number };
 
+export type BudgetCategoryOption = Pick<BudgetCategory, "id" | "name">;
+
 export type ExpenseWithRelations = Expense & {
-    category: BudgetCategory;
+    category: BudgetCategoryOption;
     creator: { id: number; name: string };
 };
 
+// Execs and admins see every expense plus the allocation overview.
 export type EventBudgetSummary = {
+    scope: "full";
     categories: EventBudgetLine[];
     expenses: ExpenseWithRelations[];
     totalAllocated: number;
     totalSpent: number;
 };
+
+// Standard members only see category names (to log against) and their own expenses.
+export type MemberBudgetView = {
+    scope: "own";
+    categories: BudgetCategoryOption[];
+    expenses: ExpenseWithRelations[];
+};
+
+export type EventBudgetView = EventBudgetSummary | MemberBudgetView;
 
 export type EventSpending = {
     eventId: number;
