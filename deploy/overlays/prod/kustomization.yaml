@@ -5,4 +5,5 @@ resources:
 - ../../base
 images:
 - name: ghcr.io/oscarstickland/knot
-  newTag: sha-98e09e4
+  newTag: sha-f23628f
+
