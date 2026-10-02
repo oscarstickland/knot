@@ -20,17 +20,17 @@ export function BudgetSection(props: { eventId: number }) {
         return <Result status="error" title="Retrieval Error" subTitle="Unable to fetch budget." />
     }
 
-    const allocations = data?.allocations ?? [];
+    const categories = data?.categories ?? [];
     const expenses = data?.expenses ?? [];
     const totalAllocated = data?.totalAllocated ?? 0;
     const totalSpent = data?.totalSpent ?? 0;
     const remaining = totalAllocated - totalSpent;
 
-    const allocationColumns: TableProps<EventBudgetLine>['columns'] = [
+    const categoryColumns: TableProps<EventBudgetLine>['columns'] = [
         {
             key: "category",
             title: "Category",
-            render: (_, line) => line.category.name
+            dataIndex: "name"
         },
         {
             key: "allocated",
@@ -107,19 +107,16 @@ export function BudgetSection(props: { eventId: number }) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
             <Text strong>Category Budgets</Text>
             {isBudgetManager && (
-                <EventBudgetModal
-                    eventId={props.eventId}
-                    currentAllocations={allocations.map((line) => ({ categoryId: line.categoryId, allocatedAmount: line.allocatedAmount }))}
-                />
+                <EventBudgetModal eventId={props.eventId} categories={categories} />
             )}
         </div>
         <Table
             rowKey="id"
             loading={isLoading}
-            columns={allocationColumns}
-            dataSource={allocations}
+            columns={categoryColumns}
+            dataSource={categories}
             pagination={false}
-            locale={{ emptyText: <Empty description="No budget assigned yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+            locale={{ emptyText: <Empty description="No budget categories yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
             style={{ marginBottom: "32px" }}
         />
 
