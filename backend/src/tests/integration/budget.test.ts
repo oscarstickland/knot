@@ -478,6 +478,43 @@ describe("Budget Integration Test", () => {
             });
             expect(res.status).toBe(400);
         });
+
+        it("does not allow logging an expense against an event in another club", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const otherClub = await harness.setupClub("Other Club");
+            const otherEvent = await setupEvent(otherClub.id);
+            const foreignCategory = await setupCategory(otherEvent.id);
+            const { cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+
+            const res = await app.request(`/api/events/${otherEvent.id}/expenses`, {
+                method: "POST",
+                headers: { cookie },
+                body: JSON.stringify({ categoryId: foreignCategory.id, amount: 50, description: "Snacks" })
+            });
+            expect(res.status).toBe(404);
+
+            const created = await harness.db.query.expensesTable.findMany({ where: { eventId: otherEvent.id } });
+            expect(created).toEqual([]);
+        });
+
+        it.each([
+            ["a non-positive amount", { amount: 0, description: "Snacks" }],
+            ["an empty description", { amount: 10, description: "" }]
+        ])("rejects %s", async (_label, payload) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const category = await setupCategory(event.id);
+            const { cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+
+            const res = await app.request(`/api/events/${event.id}/expenses`, {
+                method: "POST",
+                headers: { cookie },
+                body: JSON.stringify({ categoryId: category.id, ...payload })
+            });
+            expect(res.status).toBe(400);
+        });
     });
 
     describe("PUT/DELETE /api/budget/expenses/:id", () => {
@@ -595,6 +632,63 @@ describe("Budget Integration Test", () => {
 
             const unchanged = await harness.db.query.expensesTable.findFirst({ where: { id: expense.id } });
             expect(unchanged?.amount).toBe(50);
+        });
+
+        it.each(["PUT", "DELETE"])("allows an exec to %s a member's expense", async (method) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { cookie } = await harness.setupUser("exec@test.com", "exec", club.id, "Exec");
+            const { user: member } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const category = await setupCategory(event.id);
+            const expense = await setupExpense(event.id, category.id, member.id, 50);
+
+            const res = await app.request(`/api/budget/expenses/${expense.id}`, {
+                method,
+                headers: { cookie },
+                body: method === "PUT" ? JSON.stringify({ categoryId: category.id, amount: 70, description: "Corrected" }) : undefined
+            });
+            expect(res.status).toBe(200);
+
+            const after = await harness.db.query.expensesTable.findFirst({ where: { id: expense.id } });
+            if (method === "PUT") {
+                expect(after?.amount).toBe(70);
+                expect(after?.createdBy).toBe(member.id);
+            } else {
+                expect(after).toBeUndefined();
+            }
+        });
+
+        it("prevents a standard user from deleting an expense in another club", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const otherClub = await harness.setupClub("Other Club");
+            const otherEvent = await setupEvent(otherClub.id);
+            const { user: otherMember } = await harness.setupUser("other@test.com", "standard", otherClub.id, "Other");
+            const { cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const foreignCategory = await setupCategory(otherEvent.id);
+            const expense = await setupExpense(otherEvent.id, foreignCategory.id, otherMember.id, 50);
+
+            const res = await app.request(`/api/budget/expenses/${expense.id}`, {
+                method: "DELETE",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(404);
+
+            const unchanged = await harness.db.query.expensesTable.findFirst({ where: { id: expense.id } });
+            expect(unchanged).not.toBeUndefined();
+        });
+
+        it("returns 404 for an expense that does not exist", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const res = await app.request("/api/budget/expenses/99999", {
+                method: "DELETE",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(404);
         });
     });
 
