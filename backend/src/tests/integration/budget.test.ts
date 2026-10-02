@@ -142,6 +142,99 @@ describe("Budget Integration Test", () => {
                 { id: catering.id, name: "Venue", allocatedAmount: 0 }
             ]);
             expect(res.status).toBe(200);
+
+            const swappedVenue = await harness.db.query.budgetCategoriesTable.findFirst({ where: { id: venue.id } });
+            const swappedCatering = await harness.db.query.budgetCategoriesTable.findFirst({ where: { id: catering.id } });
+            expect(swappedVenue?.name).toBe("Catering");
+            expect(swappedCatering?.name).toBe("Venue");
+        });
+
+        it("returns the full budget summary after saving", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const venue = await setupCategory(event.id, "Venue", 100);
+            await setupExpense(event.id, venue.id, admin.id, 40);
+
+            const res = await putBudget(app, event.id, cookie, [
+                { id: venue.id, name: "Venue", allocatedAmount: 300 },
+                { name: "Catering", allocatedAmount: 50 }
+            ]);
+            expect(res.status).toBe(200);
+            const body = await res.json() as EventBudgetSummary;
+
+            expect(body.scope).toBe("full");
+            expect(body.totalAllocated).toBe(350);
+            expect(body.totalSpent).toBe(40);
+            expect(body.categories.map((category) => [category.name, category.allocatedAmount, category.spent])).toEqual([
+                ["Venue", 300, 40],
+                ["Catering", 50, 0]
+            ]);
+            expect(body.expenses.length).toBe(1);
+        });
+
+        it("trims whitespace from category names", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const res = await putBudget(app, event.id, cookie, [{ name: "  Venue  ", allocatedAmount: 10 }]);
+            expect(res.status).toBe(200);
+
+            const category = await harness.db.query.budgetCategoriesTable.findFirst({ where: { eventId: event.id } });
+            expect(category?.name).toBe("Venue");
+        });
+
+        it.each([
+            ["a negative allocation", [{ name: "Venue", allocatedAmount: -1 }]],
+            ["a blank name", [{ name: "   ", allocatedAmount: 1 }]],
+            ["a missing allocation", [{ name: "Venue" }]],
+            ["a non-integer id", [{ id: 1.5, name: "Venue", allocatedAmount: 1 }]]
+        ])("rejects %s", async (_label, categories) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const res = await putBudget(app, event.id, cookie, categories);
+            expect(res.status).toBe(400);
+
+            const stored = await harness.db.query.budgetCategoriesTable.findMany({ where: { eventId: event.id } });
+            expect(stored).toEqual([]);
+        });
+
+        it("rejects a payload without a categories array", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const res = await app.request(`/api/events/${event.id}/budget`, {
+                method: "PUT",
+                headers: { cookie },
+                body: JSON.stringify({ allocations: [] })
+            });
+            expect(res.status).toBe(400);
+        });
+
+        it("removes unused categories while keeping ones that have expenses", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const venue = await setupCategory(event.id, "Venue", 100);
+            const marketing = await setupCategory(event.id, "Marketing", 50);
+            await setupExpense(event.id, venue.id, admin.id, 20);
+
+            const res = await putBudget(app, event.id, cookie, [{ id: venue.id, name: "Venue", allocatedAmount: 100 }]);
+            expect(res.status).toBe(200);
+
+            const removed = await harness.db.query.budgetCategoriesTable.findFirst({ where: { id: marketing.id } });
+            expect(removed).toBeUndefined();
+            const kept = await harness.db.query.expensesTable.findMany({ where: { eventId: event.id } });
+            expect(kept.length).toBe(1);
         });
 
         it("rejects duplicate category names", async () => {
@@ -182,6 +275,8 @@ describe("Budget Integration Test", () => {
 
             const res = await putBudget(app, event.id, cookie, []);
             expect(res.status).toBe(409);
+            const body = await res.json() as HTTPError;
+            expect(body.message).toContain("Venue");
 
             const stillExists = await harness.db.query.budgetCategoriesTable.findFirst({ where: { id: category.id } });
             expect(stillExists).not.toBeUndefined();
