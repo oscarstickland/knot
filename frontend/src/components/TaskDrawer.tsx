@@ -16,6 +16,7 @@ import { EditOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
 import { z } from "zod";
 import { useAppNotification } from "@/lib/useAppNotification";
 import { priorityColor, TaskStatusPill } from "@/components/TaskStatusPill.tsx";
+import { findCyclicDependency } from "@knot/backend/task-dependencies";
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -57,9 +58,15 @@ export function TaskDrawer(props: TaskDrawerProps) {
     const { data: members } = useSWR<ClubMember[]>(canManage ? "/user" : null);
     const { data: eventTasks } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${eventId}`);
     const taskById = new Map((eventTasks ?? []).map((candidate) => [candidate.id, candidate]));
+    const existingDependencies = (eventTasks ?? []).flatMap((candidate) => candidate.dependsOn);
+    // Tasks that already depend on this one (directly or transitively) are disabled to prevent cycles
     const dependencyOptions = (eventTasks ?? [])
         .filter((candidate) => candidate.id !== task?.id)
-        .map((candidate) => ({ label: candidate.title, value: candidate.id }));
+        .map((candidate) => ({
+            label: candidate.title,
+            value: candidate.id,
+            disabled: task !== undefined && findCyclicDependency(existingDependencies, task.id, [candidate.id]) !== null
+        }));
 
     const defaultValues = isEditMode ? {
         eventId,
