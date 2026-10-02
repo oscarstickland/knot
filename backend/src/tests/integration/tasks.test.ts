@@ -1,7 +1,7 @@
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect } from "bun:test";
 import { type TestDatabaseHarness, setupHarness } from "../harness.ts";
 import { eventsTable, tasksTable, taskAssignmentsTable, taskDependenciesTable } from "../../db/schema.ts";
-import type { Task } from "../../types/tasks.ts";
+import type { Task, TaskWithRelations } from "../../types/tasks.ts";
 
 type HTTPError = {
     message: string
@@ -398,6 +398,61 @@ describe("Task Integration Test", () => {
             const dependencies = await harness.db.query.taskDependenciesTable.findMany({ where: { taskId: task.id } });
             expect(assignments.map((a) => a.userId)).toEqual([member.id]);
             expect(dependencies.map((d) => d.dependsOnTaskId)).toEqual([dependency.id]);
+        });
+    });
+
+    describe("GET /api/tasks (assignee names)", () => {
+        it.each(["standard", "exec", "admin"])("includes assignee names in the event task list for %s users", async (role) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { cookie } = await harness.setupUser("viewer@test.com", role, club.id, "Viewer");
+            const { user: assignee } = await harness.setupUser("assignee@test.com", "standard", club.id, "Jamie Assignee");
+            const task = await setupTask(event.id, admin.id, "Task");
+            await assignUser(task.id, assignee.id);
+
+            const res = await app.request(`/api/tasks?eventId=${event.id}`, { headers: { cookie } });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as TaskWithRelations[];
+            expect(body[0]?.assignments).toEqual([
+                { taskId: task.id, userId: assignee.id, user: { id: assignee.id, name: "Jamie Assignee" } }
+            ]);
+        });
+
+        it("does not expose assignee emails or passwords", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { cookie } = await harness.setupUser("viewer@test.com", "standard", club.id, "Viewer");
+            const task = await setupTask(event.id, admin.id, "Task");
+            await assignUser(task.id, admin.id);
+
+            const res = await app.request(`/api/tasks/${task.id}`, { headers: { cookie } });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as TaskWithRelations;
+            expect(Object.keys(body.assignments[0]?.user ?? {}).sort()).toEqual(["id", "name"]);
+        });
+
+        it("includes assignee names in the requesting user's own task list", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user: member, cookie } = await harness.setupUser("member@test.com", "standard", club.id, "Member");
+            const task = await setupTask(event.id, admin.id, "Task");
+            await assignUser(task.id, member.id);
+            await assignUser(task.id, admin.id);
+
+            const res = await app.request("/api/tasks/me", { headers: { cookie } });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as TaskWithRelations[];
+            const names = body[0]?.assignments.map((assignment) => assignment.user?.name).sort();
+            expect(names).toEqual(["Admin", "Member"]);
         });
     });
 

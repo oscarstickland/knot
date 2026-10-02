@@ -37,8 +37,17 @@ export type TaskAuditLogEntry = typeof taskAuditLogTable.$inferSelect;
 export type TaskAssignment = typeof taskAssignmentsTable.$inferSelect;
 export type TaskDependency = typeof taskDependenciesTable.$inferSelect;
 
+export type TaskAssignee = {
+    id: number;
+    name: string;
+};
+
+export type TaskAssignmentWithUser = TaskAssignment & {
+    user: TaskAssignee | null;
+};
+
 export type TaskWithRelations = Task & {
-    assignments: TaskAssignment[];
+    assignments: TaskAssignmentWithUser[];
     dependsOn: TaskDependency[];
     documents: TaskDocument[];
     event: ClubEvent;

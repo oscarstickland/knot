@@ -28,6 +28,12 @@ function isExecOrAdmin(role: string): boolean {
     return role === "exec" || role === "admin";
 }
 
+// Assignee names are included so members without access to the full member list
+// can still see who a task is assigned to.
+const assignmentsWithUser = {
+    with: { user: { columns: { id: true, name: true } } }
+} as const;
+
 async function loadClubTask(db: Db, taskId: number, clubId: number) {
     const task = await db.query.tasksTable.findFirst({
         where: { id: taskId },
@@ -130,7 +136,7 @@ tasksApp.get("/", async (c) => {
 
     const tasks = await db.query.tasksTable.findMany({
         where: { eventId },
-        with: { assignments: true, dependsOn: true, documents: true }
+        with: { assignments: assignmentsWithUser, dependsOn: true, documents: true }
     });
 
     return c.json(tasks);
@@ -146,7 +152,7 @@ tasksApp.get("/me", async (c) => {
             assignments: { userId: user.id },
             event: { clubId: user.club.id }
         },
-        with: { event: true, assignments: true, dependsOn: true, documents: true }
+        with: { event: true, assignments: assignmentsWithUser, dependsOn: true, documents: true }
     });
 
     return c.json(tasks);
@@ -159,7 +165,7 @@ tasksApp.get("/:id{[0-9]+}", async (c) => {
 
     const task = await db.query.tasksTable.findFirst({
         where: { id: taskId },
-        with: { event: true, assignments: true, dependsOn: true, documents: true, auditLog: true }
+        with: { event: true, assignments: assignmentsWithUser, dependsOn: true, documents: true, auditLog: true }
     });
 
     if (!task || !task.event || task.event.clubId !== user.club.id) throw new HTTPException(404, { message: "Task not found" });
