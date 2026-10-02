@@ -9,6 +9,7 @@ import { Link } from "react-router";
 import { Listy } from 'antd';
 import type { TaskWithRelations } from "@knot/backend/tasks";
 import { TaskStatusPill } from "@/components/TaskStatusPill.tsx";
+import { pluralise } from "@/lib/pluralise.ts";
 
 const { Text, Title } = Typography;
 dayjs.extend(advancedFormat);
@@ -41,7 +42,7 @@ export function DashboardPage() {
                         margin: "1em 0em",
                         color: token.colorTextSecondary }}
                     >
-                        {currentDate} { events.data ? `· ${events.data.length} active ${events.data.length === 1 ? "event" : "events"}` : "" }
+                        {currentDate} { events.data ? `· ${pluralise(events.data.length, "active event")}` : "" }
                     </p>
                 </div>
 
