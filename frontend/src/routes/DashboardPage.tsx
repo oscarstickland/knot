@@ -41,7 +41,7 @@ export function DashboardPage() {
                         margin: "1em 0em",
                         color: token.colorTextSecondary }}
                     >
-                        {currentDate} { events.data ? `· ${events.data.length} active event/s` : "" }
+                        {currentDate} { events.data ? `· ${events.data.length} active ${events.data.length === 1 ? "event" : "events"}` : "" }
                     </p>
                 </div>
 
