@@ -62,13 +62,15 @@ export function DashboardPage() {
 }
 
 function UpcomingTasks() {
+    const { token } = theme.useToken();
     const tasks = useSWR<TaskWithRelations[]>("/tasks/me");
 
     const dataVisible = tasks.data && tasks.data.length > 0;
 
     const EmptyTasks = () => {
-        return <div style={{ display: 'flex', alignItems: "center", justifyContent: "center", height: "100%" }}>
-            <p>No Upcoming Tasks</p>
+        return <div style={{ display: 'flex', flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%" }}>
+            <p style={{ margin: 0 }}>No Upcoming Tasks</p>
+            <p style={{ margin: "0.5em 0 0", color: token.colorTextSecondary }}>Assign Yourself to a Task to See it Here</p>
         </div>
     }
 
