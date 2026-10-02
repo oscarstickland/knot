@@ -109,7 +109,9 @@ export const AppShell: React.FC = () => {
                         selectedKeys={[location.pathname]}
                         onClick={onMenuClick}
                     />
-                    <SupportedByMonashAutomation />
+                    <div style={{ paddingBottom: "12px" }}>
+                        <SupportedByMonashAutomation />
+                    </div>
                     <div style={{ borderTop: "1px solid", borderColor: token.colorBorderSecondary }}>
                         <CurrentUser />
                     </div>
