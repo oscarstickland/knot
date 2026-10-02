@@ -236,6 +236,145 @@ describe("Task Integration Test", () => {
             expect(res.status).toBe(400);
         });
 
+        it("prevents creating a transitive circular dependency across a chain of tasks", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            // taskC depends on taskB, which depends on taskA
+            const taskA = await setupTask(event.id, admin.id, "Task A");
+            const taskB = await setupTask(event.id, admin.id, "Task B");
+            const taskC = await setupTask(event.id, admin.id, "Task C");
+            await setupDependency(taskB.id, taskA.id);
+            await setupDependency(taskC.id, taskB.id);
+
+            // making taskA depend on taskC would close the loop A -> C -> B -> A
+            const res = await app.request(`/api/tasks/${taskA.id}`, {
+                method: "PUT",
+                headers: { cookie },
+                body: JSON.stringify({
+                    eventId: event.id, title: "Task A", description: "Description", priority: "medium",
+                    assigneeIds: [], dependencyIds: [taskC.id]
+                })
+            });
+            expect(res.status).toBe(400);
+
+            const body = await res.json() as HTTPError;
+            expect(body.message).toContain("Task C");
+        });
+
+        it("rejects the whole update when only one of several dependencies is circular", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const taskA = await setupTask(event.id, admin.id, "Task A");
+            const taskB = await setupTask(event.id, admin.id, "Task B");
+            const unrelated = await setupTask(event.id, admin.id, "Unrelated Task");
+            await setupDependency(taskB.id, taskA.id);
+
+            const res = await app.request(`/api/tasks/${taskA.id}`, {
+                method: "PUT",
+                headers: { cookie },
+                body: JSON.stringify({
+                    eventId: event.id, title: "Task A Renamed", description: "Description", priority: "medium",
+                    assigneeIds: [], dependencyIds: [unrelated.id, taskB.id]
+                })
+            });
+            expect(res.status).toBe(400);
+
+            const body = await res.json() as HTTPError;
+            expect(body.message).toContain("Task B");
+
+            // nothing about taskA should have changed
+            const dependencies = await harness.db.query.taskDependenciesTable.findMany({ where: { taskId: taskA.id } });
+            const unchangedTask = await harness.db.query.tasksTable.findFirst({ where: { id: taskA.id } });
+            expect(dependencies).toEqual([]);
+            expect(unchangedTask?.title).toBe("Task A");
+        });
+
+        it("allows diamond-shaped dependencies that share a common prerequisite", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            // taskB and taskC both depend on taskA; taskD depending on both is not a cycle
+            const taskA = await setupTask(event.id, admin.id, "Task A");
+            const taskB = await setupTask(event.id, admin.id, "Task B");
+            const taskC = await setupTask(event.id, admin.id, "Task C");
+            const taskD = await setupTask(event.id, admin.id, "Task D");
+            await setupDependency(taskB.id, taskA.id);
+            await setupDependency(taskC.id, taskA.id);
+
+            const res = await app.request(`/api/tasks/${taskD.id}`, {
+                method: "PUT",
+                headers: { cookie },
+                body: JSON.stringify({
+                    eventId: event.id, title: "Task D", description: "Description", priority: "medium",
+                    assigneeIds: [], dependencyIds: [taskB.id, taskC.id]
+                })
+            });
+            expect(res.status).toBe(200);
+
+            const dependencies = await harness.db.query.taskDependenciesTable.findMany({ where: { taskId: taskD.id } });
+            expect(dependencies.map((d) => d.dependsOnTaskId).sort()).toEqual([taskB.id, taskC.id].sort());
+        });
+
+        it("allows re-saving a task with its existing dependencies unchanged", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const taskA = await setupTask(event.id, admin.id, "Task A");
+            const taskB = await setupTask(event.id, admin.id, "Task B");
+            await setupDependency(taskB.id, taskA.id);
+
+            const res = await app.request(`/api/tasks/${taskB.id}`, {
+                method: "PUT",
+                headers: { cookie },
+                body: JSON.stringify({
+                    eventId: event.id, title: "Task B", description: "Updated description", priority: "high",
+                    assigneeIds: [], dependencyIds: [taskA.id]
+                })
+            });
+            expect(res.status).toBe(200);
+        });
+
+        it("allows reversing a dependency once the original link is removed", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const taskA = await setupTask(event.id, admin.id, "Task A");
+            const taskB = await setupTask(event.id, admin.id, "Task B");
+            await setupDependency(taskB.id, taskA.id);
+
+            const removeLink = await app.request(`/api/tasks/${taskB.id}`, {
+                method: "PUT",
+                headers: { cookie },
+                body: JSON.stringify({
+                    eventId: event.id, title: "Task B", description: "Description", priority: "medium",
+                    assigneeIds: [], dependencyIds: []
+                })
+            });
+            expect(removeLink.status).toBe(200);
+
+            const reverseLink = await app.request(`/api/tasks/${taskA.id}`, {
+                method: "PUT",
+                headers: { cookie },
+                body: JSON.stringify({
+                    eventId: event.id, title: "Task A", description: "Description", priority: "medium",
+                    assigneeIds: [], dependencyIds: [taskB.id]
+                })
+            });
+            expect(reverseLink.status).toBe(200);
+        });
+
         it.each(["exec", "admin"])("allows %s to update a task's dependencies and assignees", async (role) => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
