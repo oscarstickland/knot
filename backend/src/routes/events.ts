@@ -5,14 +5,22 @@ import {zValidator} from "@hono/zod-validator";
 import { z } from 'zod';
 import {HTTPException} from "hono/http-exception";
 import {ArchiveEventSchema, SetAttendanceOpenSchema, UpdateEventSchema} from "../types/events.ts";
-import {CreateExpenseSchema, SetEventBudgetsSchema} from "../types/budget.ts";
-import {clubsTable, eventsTable, budgetCategoriesTable, eventBudgetsTable, expensesTable} from "../db/schema.ts";
-import {and, eq} from "drizzle-orm";
+import {
+    CreateExpenseSchema,
+    SetEventBudgetSchema,
+    type EventBudgetSummary,
+    type ExpenseWithRelations,
+    type MemberBudgetView
+} from "../types/budget.ts";
+import {clubsTable, eventsTable, budgetCategoriesTable, expensesTable} from "../db/schema.ts";
+import {and, eq, inArray} from "drizzle-orm";
 import {describeZodError} from "../types/errors.ts";
 
 function isExecOrAdmin(role: string): boolean {
     return role === "exec" || role === "admin";
 }
+
+type Db = DbEnv["Variables"]["db"];
 
 const eventsApp = new Hono<UserEnv & DbEnv>();
 eventsApp.use("*", isAuthenticated);
@@ -151,51 +159,86 @@ eventsApp.patch("/:id{[0-9]+}/attendance", async (c) => {
     return c.json(updatedEvent);
 });
 
-eventsApp.get("/:id{[0-9]+}/budget", async (c) => {
-    const eventId = Number(c.req.param("id"));
-    const db = c.get("db");
-    const user = c.var.user;
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
+type ExpenseRow = Awaited<ReturnType<typeof loadExpenses>>[number];
 
-    const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+function loadExpenses(db: Db, eventId: number, createdBy?: number) {
+    return db.query.expensesTable.findMany({
+        where: createdBy === undefined ? { eventId } : { eventId, createdBy },
+        with: { category: true, creator: true },
+        orderBy: { id: "asc" }
     });
-    if (!event) throw new HTTPException(404, { message: "Event not found" });
+}
 
-    const allocations = await db.query.eventBudgetsTable.findMany({
-        where: { eventId },
-        with: { category: true }
-    });
+function toExpenseWithRelations(expense: ExpenseRow): ExpenseWithRelations {
+    const { category, creator, ...rest } = expense;
+    return {
+        ...rest,
+        category: { id: category!.id, name: category!.name },
+        creator: { id: creator!.id, name: creator!.name }
+    };
+}
 
-    const expenses = await db.query.expensesTable.findMany({
-        where: { eventId },
-        with: { category: true, creator: true }
-    });
+async function loadEventBudget(db: Db, eventId: number): Promise<EventBudgetSummary> {
+    const [categories, expenses] = await Promise.all([
+        db.query.budgetCategoriesTable.findMany({
+            where: { eventId },
+            orderBy: { id: "asc" }
+        }),
+        loadExpenses(db, eventId)
+    ]);
 
     const spentByCategory = new Map<number, number>();
     for (const expense of expenses) {
         spentByCategory.set(expense.categoryId, (spentByCategory.get(expense.categoryId) ?? 0) + expense.amount);
     }
 
-    const allocationLines = allocations.map((allocation) => ({
-        ...allocation,
-        spent: spentByCategory.get(allocation.categoryId) ?? 0
-    }));
-
-    const totalAllocated = allocations.reduce((sum, allocation) => sum + allocation.allocatedAmount, 0);
-    const totalSpent = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-
-    return c.json({
-        allocations: allocationLines,
-        expenses: expenses.map((expense) => ({
-            ...expense,
-            creator: { id: expense.creator!.id, name: expense.creator!.name }
+    return {
+        scope: "full",
+        categories: categories.map((category) => ({
+            ...category,
+            spent: spentByCategory.get(category.id) ?? 0
         })),
-        totalAllocated,
-        totalSpent
+        expenses: expenses.map(toExpenseWithRelations),
+        totalAllocated: categories.reduce((sum, category) => sum + category.allocatedAmount, 0),
+        totalSpent: expenses.reduce((sum, expense) => sum + expense.amount, 0)
+    };
+}
+
+async function loadMemberBudget(db: Db, eventId: number, userId: number): Promise<MemberBudgetView> {
+    const [categories, expenses] = await Promise.all([
+        db.query.budgetCategoriesTable.findMany({
+            where: { eventId },
+            columns: { id: true, name: true },
+            orderBy: { id: "asc" }
+        }),
+        loadExpenses(db, eventId, userId)
+    ]);
+
+    return {
+        scope: "own",
+        categories,
+        expenses: expenses.map(toExpenseWithRelations)
+    };
+}
+
+eventsApp.get("/:id{[0-9]+}/budget", async (c) => {
+    const eventId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const user = c.var.user;
+
+    const event = await db.query.eventsTable.findFirst({
+        where: { id: eventId, clubId: user.club.id }
     });
+    if (!event) throw new HTTPException(404, { message: "Event not found" });
+
+    if (!isExecOrAdmin(user.role)) {
+        return c.json(await loadMemberBudget(db, eventId, user.id));
+    }
+    return c.json(await loadEventBudget(db, eventId));
 });
 
+// Replaces the event's full set of budget categories: rows with an id are updated,
+// rows without one are created, and existing categories missing from the payload are deleted.
 eventsApp.put("/:id{[0-9]+}/budget", async (c) => {
     const eventId = Number(c.req.param("id"));
     const db = c.get("db");
@@ -203,50 +246,72 @@ eventsApp.put("/:id{[0-9]+}/budget", async (c) => {
     if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
 
     const body = await c.req.json();
-    const parsed = SetEventBudgetsSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    const parsed = SetEventBudgetSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const event = await db.query.eventsTable.findFirst({
         where: { id: eventId, clubId: user.club.id }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
-    const categoryIds = parsed.data.allocations.map((allocation) => allocation.categoryId);
-    if (categoryIds.length > 0) {
-        const categories = await db.query.budgetCategoriesTable.findMany({
-            where: { id: { in: categoryIds }, clubId: user.club.id }
+    const existingCategories = await db.query.budgetCategoriesTable.findMany({ where: { eventId } });
+    const existingIds = new Set(existingCategories.map((category) => category.id));
+
+    const toUpdate = parsed.data.categories.filter((category) => category.id !== undefined);
+    const toCreate = parsed.data.categories.filter((category) => category.id === undefined);
+    if (toUpdate.some((category) => !existingIds.has(category.id!))) {
+        throw new HTTPException(400, { message: "One or more categories do not belong to this event" });
+    }
+
+    const keptIds = new Set(toUpdate.map((category) => category.id!));
+    const toDelete = existingCategories.filter((category) => !keptIds.has(category.id));
+    if (toDelete.length > 0) {
+        const expenseInUse = await db.query.expensesTable.findFirst({
+            where: { categoryId: { in: toDelete.map((category) => category.id) } },
+            with: { category: true }
         });
-        if (categories.length !== new Set(categoryIds).size) {
-            throw new HTTPException(400, { message: "One or more categories do not belong to this club" });
+        if (expenseInUse) {
+            throw new HTTPException(409, {
+                message: `"${expenseInUse.category!.name}" has expenses logged against it and cannot be removed`
+            });
         }
     }
 
     await db.transaction(async (tx) => {
-        await tx.delete(eventBudgetsTable).where(eq(eventBudgetsTable.eventId, eventId));
-        if (parsed.data.allocations.length > 0) {
-            await tx.insert(eventBudgetsTable).values(
-                parsed.data.allocations.map((allocation) => ({
+        if (toDelete.length > 0) {
+            await tx.delete(budgetCategoriesTable).where(inArray(budgetCategoriesTable.id, toDelete.map((category) => category.id)));
+        }
+        // Park renamed categories on a placeholder name first so swapping names never trips the unique constraint
+        for (const category of toUpdate) {
+            await tx
+                .update(budgetCategoriesTable)
+                .set({ name: `__pending_${category.id}` })
+                .where(eq(budgetCategoriesTable.id, category.id!));
+        }
+        for (const category of toUpdate) {
+            await tx
+                .update(budgetCategoriesTable)
+                .set({ name: category.name, allocatedAmount: category.allocatedAmount })
+                .where(eq(budgetCategoriesTable.id, category.id!));
+        }
+        if (toCreate.length > 0) {
+            await tx.insert(budgetCategoriesTable).values(
+                toCreate.map((category) => ({
                     eventId,
-                    categoryId: allocation.categoryId,
-                    allocatedAmount: allocation.allocatedAmount
+                    name: category.name,
+                    allocatedAmount: category.allocatedAmount
                 }))
             );
         }
     });
 
-    const allocations = await db.query.eventBudgetsTable.findMany({
-        where: { eventId },
-        with: { category: true }
-    });
-
-    return c.json(allocations);
+    return c.json(await loadEventBudget(db, eventId));
 });
 
 eventsApp.post("/:id{[0-9]+}/expenses", async (c) => {
     const eventId = Number(c.req.param("id"));
     const db = c.get("db");
     const user = c.var.user;
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
 
     const body = await c.req.json();
     const parsed = CreateExpenseSchema.safeParse(body);
@@ -258,9 +323,9 @@ eventsApp.post("/:id{[0-9]+}/expenses", async (c) => {
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
     const category = await db.query.budgetCategoriesTable.findFirst({
-        where: { id: parsed.data.categoryId, clubId: user.club.id }
+        where: { id: parsed.data.categoryId, eventId }
     });
-    if (!category) throw new HTTPException(400, { message: "Category does not belong to this club" });
+    if (!category) throw new HTTPException(400, { message: "Category does not belong to this event" });
 
     const [expense] = await db
         .insert(expensesTable)

@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { isAuthenticated, type UserEnv } from "../services/auth.ts";
 import type { DbEnv } from "../db/connection.ts";
 import { HTTPException } from "hono/http-exception";
-import { CreateCategorySchema, UpdateCategorySchema, UpdateExpenseSchema } from "../types/budget.ts";
-import { budgetCategoriesTable, eventBudgetsTable, expensesTable } from "../db/schema.ts";
+import { UpdateExpenseSchema } from "../types/budget.ts";
+import { budgetCategoriesTable, expensesTable } from "../db/schema.ts";
 import { eq, inArray, sql } from "drizzle-orm";
 
 type Db = DbEnv["Variables"]["db"];
@@ -15,140 +15,59 @@ function isExecOrAdmin(role: string): boolean {
     return role === "exec" || role === "admin";
 }
 
-async function loadClubExpense(db: Db, expenseId: number, clubId: number) {
+// Execs and admins can manage any expense in their club; standard members only their own.
+// Returns null (treated as 404) for expenses the user can't touch, so their existence isn't leaked.
+async function loadManageableExpense(db: Db, expenseId: number, user: UserEnv["Variables"]["user"]) {
     const expense = await db.query.expensesTable.findFirst({
         where: { id: expenseId },
         with: { event: true }
     });
 
-    if (!expense || !expense.event || expense.event.clubId !== clubId) return null;
+    if (!expense || !expense.event || expense.event.clubId !== user.club.id) return null;
+    if (!isExecOrAdmin(user.role) && expense.createdBy !== user.id) return null;
     return expense;
 }
-
-budgetApp.get("/categories", async (c) => {
-    const user = c.var.user;
-    const db = c.get("db");
-
-    const categories = await db.query.budgetCategoriesTable.findMany({
-        where: { clubId: user.club.id }
-    });
-
-    return c.json(categories);
-});
-
-budgetApp.post("/categories", async (c) => {
-    const user = c.var.user;
-    const db = c.get("db");
-    if (user.role !== "admin") throw new HTTPException(403);
-
-    const body = await c.req.json();
-    const parsed = CreateCategorySchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
-
-    const existing = await db.query.budgetCategoriesTable.findFirst({
-        where: { clubId: user.club.id, name: parsed.data.name }
-    });
-    if (existing) throw new HTTPException(400, { message: "A category with this name already exists" });
-
-    const [category] = await db
-        .insert(budgetCategoriesTable)
-        .values({ clubId: user.club.id, name: parsed.data.name })
-        .returning();
-
-    return c.json(category, 201);
-});
-
-budgetApp.put("/categories/:id{[0-9]+}", async (c) => {
-    const user = c.var.user;
-    const db = c.get("db");
-    if (user.role !== "admin") throw new HTTPException(403);
-
-    const categoryId = Number(c.req.param("id"));
-    const body = await c.req.json();
-    const parsed = UpdateCategorySchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
-
-    const existingCategory = await db.query.budgetCategoriesTable.findFirst({
-        where: { id: categoryId, clubId: user.club.id }
-    });
-    if (!existingCategory) throw new HTTPException(404, { message: "Category not found" });
-
-    const duplicate = await db.query.budgetCategoriesTable.findFirst({
-        where: { clubId: user.club.id, name: parsed.data.name, id: { ne: categoryId } }
-    });
-    if (duplicate) throw new HTTPException(400, { message: "A category with this name already exists" });
-
-    const [category] = await db
-        .update(budgetCategoriesTable)
-        .set({ name: parsed.data.name })
-        .where(eq(budgetCategoriesTable.id, categoryId))
-        .returning();
-
-    return c.json(category);
-});
-
-budgetApp.delete("/categories/:id{[0-9]+}", async (c) => {
-    const user = c.var.user;
-    const db = c.get("db");
-    if (user.role !== "admin") throw new HTTPException(403);
-
-    const categoryId = Number(c.req.param("id"));
-
-    const existingCategory = await db.query.budgetCategoriesTable.findFirst({
-        where: { id: categoryId, clubId: user.club.id }
-    });
-    if (!existingCategory) throw new HTTPException(404, { message: "Category not found" });
-
-    const [allocation, expense] = await Promise.all([
-        db.query.eventBudgetsTable.findFirst({ where: { categoryId } }),
-        db.query.expensesTable.findFirst({ where: { categoryId } })
-    ]);
-    if (allocation || expense) {
-        throw new HTTPException(409, {
-            message: "This category is in use by an event budget or expense and cannot be deleted"
-        });
-    }
-
-    await db.delete(budgetCategoriesTable).where(eq(budgetCategoriesTable.id, categoryId));
-
-    return c.json({ message: "Deleted" });
-});
 
 budgetApp.get("/spending", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
     if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
 
-    const categories = await db.query.budgetCategoriesTable.findMany({
-        where: { clubId: user.club.id }
+    const events = await db.query.eventsTable.findMany({
+        where: { clubId: user.club.id },
+        orderBy: { start: "desc" }
     });
-    const categoryIds = categories.map((category) => category.id);
+    const eventIds = events.map((event) => event.id);
 
-    const allocationTotals = categoryIds.length > 0
+    const allocationTotals = eventIds.length > 0
         ? await db
-            .select({ categoryId: eventBudgetsTable.categoryId, total: sql<string>`sum(${eventBudgetsTable.allocatedAmount})` })
-            .from(eventBudgetsTable)
-            .where(inArray(eventBudgetsTable.categoryId, categoryIds))
-            .groupBy(eventBudgetsTable.categoryId)
+            .select({ eventId: budgetCategoriesTable.eventId, total: sql<string>`sum(${budgetCategoriesTable.allocatedAmount})` })
+            .from(budgetCategoriesTable)
+            .where(inArray(budgetCategoriesTable.eventId, eventIds))
+            .groupBy(budgetCategoriesTable.eventId)
         : [];
 
-    const expenseTotals = categoryIds.length > 0
+    const expenseTotals = eventIds.length > 0
         ? await db
-            .select({ categoryId: expensesTable.categoryId, total: sql<string>`sum(${expensesTable.amount})` })
+            .select({ eventId: expensesTable.eventId, total: sql<string>`sum(${expensesTable.amount})` })
             .from(expensesTable)
-            .where(inArray(expensesTable.categoryId, categoryIds))
-            .groupBy(expensesTable.categoryId)
+            .where(inArray(expensesTable.eventId, eventIds))
+            .groupBy(expensesTable.eventId)
         : [];
 
-    const allocatedByCategory = new Map(allocationTotals.map((row) => [row.categoryId, Number(row.total)]));
-    const spentByCategory = new Map(expenseTotals.map((row) => [row.categoryId, Number(row.total)]));
+    const allocatedByEvent = new Map(allocationTotals.map((row) => [row.eventId, Number(row.total)]));
+    const spentByEvent = new Map(expenseTotals.map((row) => [row.eventId, Number(row.total)]));
 
-    const spending = categories.map((category) => ({
-        categoryId: category.id,
-        name: category.name,
-        totalAllocated: allocatedByCategory.get(category.id) ?? 0,
-        totalSpent: spentByCategory.get(category.id) ?? 0
-    }));
+    const spending = events
+        .filter((event) => allocatedByEvent.has(event.id) || spentByEvent.has(event.id))
+        .map((event) => ({
+            eventId: event.id,
+            name: event.name,
+            start: event.start,
+            archived: event.archived,
+            totalAllocated: allocatedByEvent.get(event.id) ?? 0,
+            totalSpent: spentByEvent.get(event.id) ?? 0
+        }));
 
     return c.json(spending);
 });
@@ -156,20 +75,19 @@ budgetApp.get("/spending", async (c) => {
 budgetApp.put("/expenses/:id{[0-9]+}", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
 
     const expenseId = Number(c.req.param("id"));
     const body = await c.req.json();
     const parsed = UpdateExpenseSchema.safeParse(body);
     if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
 
-    const existingExpense = await loadClubExpense(db, expenseId, user.club.id);
+    const existingExpense = await loadManageableExpense(db, expenseId, user);
     if (!existingExpense) throw new HTTPException(404, { message: "Expense not found" });
 
     const category = await db.query.budgetCategoriesTable.findFirst({
-        where: { id: parsed.data.categoryId, clubId: user.club.id }
+        where: { id: parsed.data.categoryId, eventId: existingExpense.eventId }
     });
-    if (!category) throw new HTTPException(400, { message: "Category does not belong to this club" });
+    if (!category) throw new HTTPException(400, { message: "Category does not belong to this event" });
 
     const [expense] = await db
         .update(expensesTable)
@@ -187,10 +105,9 @@ budgetApp.put("/expenses/:id{[0-9]+}", async (c) => {
 budgetApp.delete("/expenses/:id{[0-9]+}", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
 
     const expenseId = Number(c.req.param("id"));
-    const existingExpense = await loadClubExpense(db, expenseId, user.club.id);
+    const existingExpense = await loadManageableExpense(db, expenseId, user);
     if (!existingExpense) throw new HTTPException(404, { message: "Expense not found" });
 
     await db.delete(expensesTable).where(eq(expensesTable.id, expenseId));

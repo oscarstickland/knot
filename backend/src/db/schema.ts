@@ -102,20 +102,12 @@ export const eventAttendanceTable = pgTable("event_attendance", {
 
 export const budgetCategoriesTable = pgTable("budget_categories", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    clubId: integer("club_id").notNull(),
+    eventId: integer("event_id").notNull(),
     name: varchar({ length: 255 }).notNull(),
+    allocatedAmount: numeric("allocated_amount", { precision: 10, scale: 2, mode: "number" }).notNull().default(0),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
-    unique().on(table.clubId, table.name)
-]);
-
-export const eventBudgetsTable = pgTable("event_budgets", {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    eventId: integer("event_id").notNull(),
-    categoryId: integer("category_id").notNull(),
-    allocatedAmount: numeric("allocated_amount", { precision: 10, scale: 2, mode: "number" }).notNull().default(0),
-}, (table) => [
-    unique().on(table.eventId, table.categoryId)
+    unique().on(table.eventId, table.name)
 ]);
 
 export const expensesTable = pgTable("expenses", {
@@ -139,7 +131,6 @@ export const relations = defineRelations({
     taskAuditLogTable,
     eventAttendanceTable,
     budgetCategoriesTable,
-    eventBudgetsTable,
     expensesTable
 }, (r) => ({
     usersTable: {
@@ -154,13 +145,12 @@ export const relations = defineRelations({
             to: r.clubsTable.id
         }),
         attendance: r.many.eventAttendanceTable(),
-        budgets: r.many.eventBudgetsTable(),
+        budgetCategories: r.many.budgetCategoriesTable(),
         expenses: r.many.expensesTable()
     },
     clubsTable: {
         users: r.many.usersTable(),
-        events: r.many.eventsTable(),
-        budgetCategories: r.many.budgetCategoriesTable()
+        events: r.many.eventsTable()
     },
     tasksTable: {
         event: r.one.eventsTable({
@@ -230,22 +220,11 @@ export const relations = defineRelations({
         })
     },
     budgetCategoriesTable: {
-        club: r.one.clubsTable({
-            from: r.budgetCategoriesTable.clubId,
-            to: r.clubsTable.id
-        }),
-        allocations: r.many.eventBudgetsTable(),
-        expenses: r.many.expensesTable()
-    },
-    eventBudgetsTable: {
         event: r.one.eventsTable({
-            from: r.eventBudgetsTable.eventId,
+            from: r.budgetCategoriesTable.eventId,
             to: r.eventsTable.id
         }),
-        category: r.one.budgetCategoriesTable({
-            from: r.eventBudgetsTable.categoryId,
-            to: r.budgetCategoriesTable.id
-        })
+        expenses: r.many.expensesTable()
     },
     expensesTable: {
         event: r.one.eventsTable({

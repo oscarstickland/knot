@@ -1,18 +1,19 @@
-import type { budgetCategoriesTable, eventBudgetsTable, expensesTable } from "../db/schema.ts";
+import type { budgetCategoriesTable, expensesTable } from "../db/schema.ts";
 import { z } from "zod";
 
-export const CreateCategorySchema = z.object({
-    name: z.string().min(1, "Category name cannot be empty").max(255)
+export const BudgetCategoryInputSchema = z.object({
+    // Present for categories that already exist; omitted for new ones.
+    id: z.number().int().positive().optional(),
+    name: z.string().trim().min(1, "Category name cannot be empty").max(255),
+    allocatedAmount: z.number().nonnegative()
 });
 
-export const UpdateCategorySchema = CreateCategorySchema;
-
-export const SetEventBudgetsSchema = z.object({
-    allocations: z.array(z.object({
-        categoryId: z.number().int().positive(),
-        allocatedAmount: z.number().nonnegative()
-    }))
-});
+export const SetEventBudgetSchema = z.object({
+    categories: z.array(BudgetCategoryInputSchema)
+}).refine(
+    (data) => new Set(data.categories.map((category) => category.name.toLowerCase())).size === data.categories.length,
+    { message: "Category names must be unique", path: ["categories"] }
+);
 
 export const CreateExpenseSchema = z.object({
     categoryId: z.number().int().positive(),
@@ -22,33 +23,46 @@ export const CreateExpenseSchema = z.object({
 
 export const UpdateExpenseSchema = CreateExpenseSchema;
 
-export type CreateCategoryData = z.infer<typeof CreateCategorySchema>;
-export type UpdateCategoryData = z.infer<typeof UpdateCategorySchema>;
-export type SetEventBudgetsData = z.infer<typeof SetEventBudgetsSchema>;
+export type BudgetCategoryInput = z.infer<typeof BudgetCategoryInputSchema>;
+export type SetEventBudgetData = z.infer<typeof SetEventBudgetSchema>;
 export type CreateExpenseData = z.infer<typeof CreateExpenseSchema>;
 export type UpdateExpenseData = z.infer<typeof UpdateExpenseSchema>;
 
 export type BudgetCategory = typeof budgetCategoriesTable.$inferSelect;
-export type EventBudget = typeof eventBudgetsTable.$inferSelect;
 export type Expense = typeof expensesTable.$inferSelect;
 
-export type EventBudgetLine = EventBudget & { category: BudgetCategory; spent: number };
+export type EventBudgetLine = BudgetCategory & { spent: number };
+
+export type BudgetCategoryOption = Pick<BudgetCategory, "id" | "name">;
 
 export type ExpenseWithRelations = Expense & {
-    category: BudgetCategory;
+    category: BudgetCategoryOption;
     creator: { id: number; name: string };
 };
 
+// Execs and admins see every expense plus the allocation overview.
 export type EventBudgetSummary = {
-    allocations: EventBudgetLine[];
+    scope: "full";
+    categories: EventBudgetLine[];
     expenses: ExpenseWithRelations[];
     totalAllocated: number;
     totalSpent: number;
 };
 
-export type CategorySpending = {
-    categoryId: number;
+// Standard members only see category names (to log against) and their own expenses.
+export type MemberBudgetView = {
+    scope: "own";
+    categories: BudgetCategoryOption[];
+    expenses: ExpenseWithRelations[];
+};
+
+export type EventBudgetView = EventBudgetSummary | MemberBudgetView;
+
+export type EventSpending = {
+    eventId: number;
     name: string;
+    start: string;
+    archived: boolean;
     totalAllocated: number;
     totalSpent: number;
 };

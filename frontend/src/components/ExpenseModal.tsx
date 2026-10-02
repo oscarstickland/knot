@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
 import useSWR, { mutate } from "swr";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { CreateExpenseSchema, type CreateExpenseData, type BudgetCategory, type ExpenseWithRelations } from "@knot/backend/budget";
+import { CreateExpenseSchema, type CreateExpenseData, type EventBudgetView, type ExpenseWithRelations } from "@knot/backend/budget";
 import { useAppNotification } from "@/lib/useAppNotification";
 
 const { TextArea } = Input;
@@ -19,7 +19,8 @@ export function ExpenseModal({ mode, eventId, expense }: ExpenseModalProps) {
     const [api, contextHolder] = useAppNotification();
     const isEditMode = mode === "update";
 
-    const { data: categories } = useSWR<BudgetCategory[]>("/budget/categories");
+    const { data: budget } = useSWR<EventBudgetView>(`/events/${eventId}/budget`);
+    const categories = budget?.categories ?? [];
 
     const { handleSubmit, formState: { errors }, control, reset } = useForm<CreateExpenseData>({
         resolver: zodResolver(CreateExpenseSchema),
@@ -117,7 +118,8 @@ export function ExpenseModal({ mode, eventId, expense }: ExpenseModalProps) {
                             <Select
                                 {...field}
                                 placeholder="Select a category"
-                                options={(categories ?? []).map((category) => ({ label: category.name, value: category.id }))}
+                                notFoundContent="Add a budget category to this event first"
+                                options={categories.map((category) => ({ label: category.name, value: category.id }))}
                             />
                         )}
                     />

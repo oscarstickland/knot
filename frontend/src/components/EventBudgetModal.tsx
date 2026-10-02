@@ -1,47 +1,48 @@
 import { useEffect, useState } from "react";
-import { Button, Drawer, Empty, Form, InputNumber, theme } from "antd";
+import { Button, Drawer, Empty, Form, Input, InputNumber, theme } from "antd";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
-import useSWR, { mutate } from "swr";
-import { SetEventBudgetsSchema, type SetEventBudgetsData, type BudgetCategory } from "@knot/backend/budget";
+import { mutate } from "swr";
+import { SetEventBudgetSchema, type SetEventBudgetData, type BudgetCategory } from "@knot/backend/budget";
 import { useAppNotification } from "@/lib/useAppNotification";
-import { EditOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 
 interface EventBudgetModalProps {
     eventId: number;
-    currentAllocations: { categoryId: number; allocatedAmount: number }[];
+    categories: BudgetCategory[];
 }
 
-export function EventBudgetModal({ eventId, currentAllocations }: EventBudgetModalProps) {
+export function EventBudgetModal({ eventId, categories }: EventBudgetModalProps) {
     const [open, setOpen] = useState(false);
     const [api, contextHolder] = useAppNotification();
     const { token } = theme.useToken();
-    const { data: categories } = useSWR<BudgetCategory[]>("/budget/categories");
-    const labelStyle = { fontWeight: token.fontWeightStrong };
 
-    const { handleSubmit, control } = useForm<SetEventBudgetsData>({
-        resolver: zodResolver(SetEventBudgetsSchema),
-        defaultValues: { allocations: [] }
+    const { handleSubmit, control, reset, formState: { errors } } = useForm<SetEventBudgetData>({
+        resolver: zodResolver(SetEventBudgetSchema),
+        defaultValues: { categories: [] }
     });
 
-    const { fields, replace } = useFieldArray({ control, name: "allocations" });
+    const listError = errors.categories?.root?.message ?? errors.categories?.message;
+    const { fields, append, remove } = useFieldArray({ control, name: "categories", keyName: "fieldKey" });
 
     useEffect(() => {
-        if (!open || !categories) return;
-        const allocationByCategory = new Map(currentAllocations.map((allocation) => [allocation.categoryId, allocation.allocatedAmount]));
-        replace(categories.map((category) => ({
-            categoryId: category.id,
-            allocatedAmount: allocationByCategory.get(category.id) ?? 0
-        })));
+        if (!open) return;
+        reset({
+            categories: categories.map((category) => ({
+                id: category.id,
+                name: category.name,
+                allocatedAmount: category.allocatedAmount
+            }))
+        });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, categories]);
+    }, [open]);
 
     const handleCancel = () => {
         setOpen(false);
     }
 
-    const submit = (data: SetEventBudgetsData) => {
+    const submit = (data: SetEventBudgetData) => {
         AxiosInstance.put(`/events/${eventId}/budget`, data)
             .then(async () => {
                 await mutate(`/events/${eventId}/budget`);
@@ -63,7 +64,7 @@ export function EventBudgetModal({ eventId, currentAllocations }: EventBudgetMod
             open={open}
             onClose={handleCancel}
             title="Edit Event Budget"
-            width={420}
+            width={480}
             footer={
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
                     <Button onClick={handleCancel}>Cancel</Button>
@@ -71,22 +72,38 @@ export function EventBudgetModal({ eventId, currentAllocations }: EventBudgetMod
                 </div>
             }
         >
-            {categories?.length === 0
-                ? <Empty description="No budget categories yet. Create one in Admin Settings first." image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                : <form onSubmit={handleSubmit(submit)}>
-                    {fields.map((field, index) => (
+            <form onSubmit={handleSubmit(submit)}>
+                {fields.length === 0 && (
+                    <Empty description="No budget categories yet." image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                )}
+                {fields.map((field, index) => {
+                    const nameError = errors.categories?.[index]?.name?.message;
+                    const amountError = errors.categories?.[index]?.allocatedAmount?.message;
+
+                    return <div key={field.fieldKey} style={{ display: "flex", gap: token.marginXS, alignItems: "flex-start" }}>
                         <Form.Item
-                            key={field.id}
-                            label={<span style={labelStyle}>{categories?.find((category) => category.id === field.categoryId)?.name}</span>}
-                            layout="vertical"
-                            colon={false}
+                            style={{ flex: 1 }}
+                            validateStatus={nameError ? "error" : ""}
+                            help={nameError}
                         >
                             <Controller
-                                name={`allocations.${index}.allocatedAmount`}
+                                name={`categories.${index}.name`}
+                                control={control}
+                                render={({ field: inputField }) => <Input {...inputField} placeholder="e.g. Venue" />}
+                            />
+                        </Form.Item>
+                        <Form.Item
+                            style={{ width: 150 }}
+                            validateStatus={amountError ? "error" : ""}
+                            help={amountError}
+                        >
+                            <Controller
+                                name={`categories.${index}.allocatedAmount`}
                                 control={control}
                                 render={({ field: inputField }) => (
                                     <InputNumber
                                         {...inputField}
+                                        onChange={(value) => inputField.onChange(value ?? 0)}
                                         style={{ width: "100%" }}
                                         min={0}
                                         precision={2}
@@ -95,9 +112,23 @@ export function EventBudgetModal({ eventId, currentAllocations }: EventBudgetMod
                                 )}
                             />
                         </Form.Item>
-                    ))}
-                </form>
-            }
+                        <Button
+                            type="text"
+                            danger
+                            aria-label="Remove category"
+                            icon={<DeleteOutlined />}
+                            onClick={() => remove(index)}
+                        />
+                    </div>
+                })}
+                {listError && <Form.Item validateStatus="error" help={listError} />}
+                <Button
+                    type="dashed"
+                    block
+                    icon={<PlusOutlined />}
+                    onClick={() => append({ name: "", allocatedAmount: 0 })}
+                >Add Category</Button>
+            </form>
         </Drawer>
         <Button icon={<EditOutlined />} onClick={() => setOpen(true)}>Edit Budget</Button>
     </>
