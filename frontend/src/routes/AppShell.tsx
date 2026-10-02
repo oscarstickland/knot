@@ -10,7 +10,7 @@ import {
     SettingOutlined,
     UserOutlined
 } from "@ant-design/icons";
-import monashAutomationLogo from "@/assets/monash-automation-logo.svg";
+import { SupportedByMonashAutomation } from "@/components/SupportedByMonashAutomation.tsx";
 
 const { Sider } = Layout;
 const { Title, Text } = Typography;
@@ -120,17 +120,6 @@ export const AppShell: React.FC = () => {
         </Layout>
     );
 };
-
-function SupportedByMonashAutomation() {
-    const { token } = theme.useToken();
-
-    return <div
-        style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25em", padding: "0.5em 1em" }}
-    >
-        <Text style={{ fontSize: "11px", color: token.colorTextTertiary }}>Supported by</Text>
-        <img src={monashAutomationLogo} alt="Monash Automation" width={100} height={22} style={{ objectFit: "contain" }} />
-    </div>;
-}
 
 function CurrentUser() {
     const navigate = useNavigate();
