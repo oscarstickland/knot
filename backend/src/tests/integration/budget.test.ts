@@ -26,11 +26,18 @@ describe("Budget Integration Test", () => {
         await harness.rollbackTransaction();
     });
 
-    async function setupEvent(clubId: number) {
-        const referenceDate = new Date();
+    async function setupEvent(clubId: number, overrides: { name?: string, start?: Date, archived?: boolean } = {}) {
+        const referenceDate = overrides.start ?? new Date();
         const [event] = await harness.db
             .insert(eventsTable)
-            .values({ name: "Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId })
+            .values({
+                name: overrides.name ?? "Event",
+                location: "Main Hall",
+                start: referenceDate,
+                end: new Date(referenceDate.valueOf() + 5000),
+                archived: overrides.archived ?? false,
+                clubId
+            })
             .returning();
         if (!event) throw new Error("Event returned is null");
         return event;
@@ -726,6 +733,47 @@ describe("Budget Integration Test", () => {
             expect(first?.totalSpent).toBe(150);
             expect(second?.totalAllocated).toBe(200);
             expect(second?.totalSpent).toBe(50);
+        });
+
+        it("allows an exec to view spending", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("exec@test.com", "exec", club.id, "Exec");
+
+            const res = await app.request("/api/budget/spending", { headers: { cookie } });
+            expect(res.status).toBe(200);
+        });
+
+        it("includes events with allocations but no expenses", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            await setupCategory(event.id, "Venue", 120);
+
+            const res = await app.request("/api/budget/spending", { headers: { cookie } });
+            const body = await res.json() as EventSpending[];
+
+            expect(body.length).toBe(1);
+            expect(body[0]).toMatchObject({ eventId: event.id, totalAllocated: 120, totalSpent: 0 });
+        });
+
+        it("orders events newest first and includes archived events", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const older = await setupEvent(club.id, { name: "Older", start: new Date("2026-01-01T10:00:00Z"), archived: true });
+            const newer = await setupEvent(club.id, { name: "Newer", start: new Date("2026-06-01T10:00:00Z") });
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            await setupCategory(older.id, "Venue", 10);
+            await setupCategory(newer.id, "Venue", 20);
+
+            const res = await app.request("/api/budget/spending", { headers: { cookie } });
+            const body = await res.json() as EventSpending[];
+
+            expect(body.map((entry) => [entry.name, entry.archived])).toEqual([
+                ["Newer", false],
+                ["Older", true]
+            ]);
         });
 
         it("omits events with no budget activity", async () => {
