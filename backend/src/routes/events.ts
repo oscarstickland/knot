@@ -4,10 +4,10 @@ import type {DbEnv} from "../db/connection.ts";
 import {zValidator} from "@hono/zod-validator";
 import { z } from 'zod';
 import {HTTPException} from "hono/http-exception";
-import {ArchiveEventSchema, SetAttendanceOpenSchema, UpdateEventSchema} from "../types/events.ts";
+import {ArchiveEventSchema, type ClubEventWithTaskProgress, SetAttendanceOpenSchema, UpdateEventSchema} from "../types/events.ts";
 import {CreateExpenseSchema, SetEventBudgetsSchema} from "../types/budget.ts";
-import {clubsTable, eventsTable, budgetCategoriesTable, eventBudgetsTable, expensesTable} from "../db/schema.ts";
-import {and, eq} from "drizzle-orm";
+import {clubsTable, eventsTable, budgetCategoriesTable, eventBudgetsTable, expensesTable, tasksTable} from "../db/schema.ts";
+import {and, count, eq, inArray, sql} from "drizzle-orm";
 import {describeZodError} from "../types/errors.ts";
 
 function isExecOrAdmin(role: string): boolean {
@@ -35,7 +35,27 @@ eventsApp.get("/", async (c) => {
                 : { clubId: user.club.id }
     });
 
-    return c.json(events);
+    const eventIds = events.map((event) => event.id);
+    const taskCounts = eventIds.length === 0 ? [] : await db
+        .select({
+            eventId: tasksTable.eventId,
+            total: count(),
+            completed: count(sql`case when ${tasksTable.progress} = 'completed' then 1 end`)
+        })
+        .from(tasksTable)
+        .where(inArray(tasksTable.eventId, eventIds))
+        .groupBy(tasksTable.eventId);
+
+    const taskCountsByEvent = new Map(taskCounts.map((row) => [row.eventId, row]));
+    const eventsWithProgress: ClubEventWithTaskProgress[] = events.map((event) => ({
+        ...event,
+        taskProgress: {
+            total: taskCountsByEvent.get(event.id)?.total ?? 0,
+            completed: taskCountsByEvent.get(event.id)?.completed ?? 0
+        }
+    }));
+
+    return c.json(eventsWithProgress);
 });
 
 eventsApp.post("/", async (c) => {
