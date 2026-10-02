@@ -314,6 +314,72 @@ describe("Budget Integration Test", () => {
             expect(body.expenses.length).toBe(2);
         });
 
+        it.each(["exec", "admin"])("shows %s every member's expenses", async (role) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { cookie } = await harness.setupUser("actor@test.com", role, club.id, "Actor");
+            const { user: member } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const category = await setupCategory(event.id, "Venue", 100);
+            await setupExpense(event.id, category.id, member.id, 30, "Snacks");
+
+            const res = await app.request(`/api/events/${event.id}/budget`, { headers: { cookie } });
+            expect(res.status).toBe(200);
+            const body = await res.json() as EventBudgetSummary;
+
+            expect(body.scope).toBe("full");
+            expect(body.expenses.map((expense) => expense.description)).toEqual(["Snacks"]);
+            expect(body.expenses[0]!.creator).toEqual({ id: member.id, name: "Standard" });
+        });
+
+        it("reports zero spend for categories without expenses, in creation order", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            await setupCategory(event.id, "Venue", 100);
+            const catering = await setupCategory(event.id, "Catering", 50);
+            await setupCategory(event.id, "Marketing", 25);
+            await setupExpense(event.id, catering.id, admin.id, 10);
+
+            const res = await app.request(`/api/events/${event.id}/budget`, { headers: { cookie } });
+            const body = await res.json() as EventBudgetSummary;
+
+            expect(body.categories.map((category) => [category.name, category.spent])).toEqual([
+                ["Venue", 0],
+                ["Catering", 10],
+                ["Marketing", 0]
+            ]);
+        });
+
+        it("returns an empty budget for an event with no categories", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const res = await app.request(`/api/events/${event.id}/budget`, { headers: { cookie } });
+            expect(res.status).toBe(200);
+            const body = await res.json() as EventBudgetSummary;
+
+            expect(body).toEqual({ scope: "full", categories: [], expenses: [], totalAllocated: 0, totalSpent: 0 });
+        });
+
+        it("only exposes the id and name of an expense's creator", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const category = await setupCategory(event.id);
+            await setupExpense(event.id, category.id, admin.id, 10);
+
+            const res = await app.request(`/api/events/${event.id}/budget`, { headers: { cookie } });
+            const body = await res.json() as EventBudgetSummary;
+
+            expect(body.expenses[0]!.creator).toEqual({ id: admin.id, name: "Admin" });
+            expect(body.expenses[0]!.category).toEqual({ id: category.id, name: "Venue" });
+        });
+
         it("only shows standard users category names and their own expenses", async () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
@@ -343,6 +409,17 @@ describe("Budget Integration Test", () => {
             const otherClub = await harness.setupClub("Other Club");
             const otherEvent = await setupEvent(otherClub.id);
             const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const res = await app.request(`/api/events/${otherEvent.id}/budget`, { headers: { cookie } });
+            expect(res.status).toBe(404);
+        });
+
+        it("does not allow a standard user to view a budget for an event in another club", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const otherClub = await harness.setupClub("Other Club");
+            const otherEvent = await setupEvent(otherClub.id);
+            const { cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
 
             const res = await app.request(`/api/events/${otherEvent.id}/budget`, { headers: { cookie } });
             expect(res.status).toBe(404);
