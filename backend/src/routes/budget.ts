@@ -15,13 +15,16 @@ function isExecOrAdmin(role: string): boolean {
     return role === "exec" || role === "admin";
 }
 
-async function loadClubExpense(db: Db, expenseId: number, clubId: number) {
+// Execs and admins can manage any expense in their club; standard members only their own.
+// Returns null (treated as 404) for expenses the user can't touch, so their existence isn't leaked.
+async function loadManageableExpense(db: Db, expenseId: number, user: UserEnv["Variables"]["user"]) {
     const expense = await db.query.expensesTable.findFirst({
         where: { id: expenseId },
         with: { event: true }
     });
 
-    if (!expense || !expense.event || expense.event.clubId !== clubId) return null;
+    if (!expense || !expense.event || expense.event.clubId !== user.club.id) return null;
+    if (!isExecOrAdmin(user.role) && expense.createdBy !== user.id) return null;
     return expense;
 }
 
@@ -72,14 +75,13 @@ budgetApp.get("/spending", async (c) => {
 budgetApp.put("/expenses/:id{[0-9]+}", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
 
     const expenseId = Number(c.req.param("id"));
     const body = await c.req.json();
     const parsed = UpdateExpenseSchema.safeParse(body);
     if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
 
-    const existingExpense = await loadClubExpense(db, expenseId, user.club.id);
+    const existingExpense = await loadManageableExpense(db, expenseId, user);
     if (!existingExpense) throw new HTTPException(404, { message: "Expense not found" });
 
     const category = await db.query.budgetCategoriesTable.findFirst({
@@ -103,10 +105,9 @@ budgetApp.put("/expenses/:id{[0-9]+}", async (c) => {
 budgetApp.delete("/expenses/:id{[0-9]+}", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
 
     const expenseId = Number(c.req.param("id"));
-    const existingExpense = await loadClubExpense(db, expenseId, user.club.id);
+    const existingExpense = await loadManageableExpense(db, expenseId, user);
     if (!existingExpense) throw new HTTPException(404, { message: "Expense not found" });
 
     await db.delete(expensesTable).where(eq(expensesTable.id, expenseId));
