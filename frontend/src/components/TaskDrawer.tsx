@@ -36,7 +36,6 @@ type TaskDrawerProps =
         eventId: number;
         task: TaskWithRelations;
         isTaskManager: boolean;
-        memberById?: Map<number, ClubMember>;
         open?: boolean;
         onOpenChange?: (open: boolean) => void;
     };
@@ -154,7 +153,7 @@ export function TaskDrawer(props: TaskDrawerProps) {
             }
         >
             {view === "summary" && task
-                ? <TaskSummary task={task} taskById={taskById} memberById={props.mode === "update" ? props.memberById : undefined} />
+                ? <TaskSummary task={task} taskById={taskById} />
                 : <form onSubmit={handleSubmit(submit)}>
                     <Form.Item
                         label="Title"
@@ -254,9 +253,8 @@ export function TaskDrawer(props: TaskDrawerProps) {
 function TaskSummary(props: {
     task: TaskWithRelations;
     taskById: Map<number, TaskWithRelations>;
-    memberById?: Map<number, ClubMember>;
 }) {
-    const { task, taskById, memberById } = props;
+    const { task, taskById } = props;
 
     return <Space direction="vertical" size="large" style={{ width: "100%" }}>
         <Space wrap>
@@ -287,7 +285,7 @@ function TaskSummary(props: {
                         {task.assignments.map((assignment) => (
                             <Space key={assignment.userId} size={8}>
                                 <Avatar size="small" icon={<UserOutlined />} />
-                                <Text>{memberById?.get(assignment.userId)?.name ?? `User ${assignment.userId}`}</Text>
+                                <Text>{assignment.user?.name ?? `User ${assignment.userId}`}</Text>
                             </Space>
                         ))}
                     </Space>

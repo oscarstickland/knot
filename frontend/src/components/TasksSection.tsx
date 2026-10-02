@@ -15,7 +15,6 @@ import {
 } from "antd";
 import useSWR, { mutate } from "swr";
 import { taskProgressStates, type TaskWithRelations } from "@knot/backend/tasks";
-import type { ClubMember } from "@knot/backend/user";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
 import { useUser } from "@/lib/auth.tsx";
 import { TaskDrawer } from "@/components/TaskDrawer.tsx";
@@ -36,8 +35,6 @@ export function TasksSection(props: { eventId: number }) {
     const user = useUser();
     const isTaskManager = user.role === "admin" || user.role === "exec";
     const { data: tasks, isLoading, error } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${props.eventId}`);
-    const { data: members } = useSWR<ClubMember[]>(isTaskManager ? "/user" : null);
-    const memberById = new Map((members ?? []).map((member) => [member.id, member]));
     const taskById = new Map((tasks ?? []).map((task) => [task.id, task]));
     const [openTaskId, setOpenTaskId] = useState<number | null>(null);
 
@@ -130,12 +127,11 @@ export function TasksSection(props: { eventId: number }) {
                     responsive: ["lg"],
                     render: (_, task) => (
                         <Avatar.Group max={{ count: 3 }}>
-                            {task.assignments.map((assignment) => {
-                                const member = memberById.get(assignment.userId);
-                                return <Tooltip key={assignment.userId} title={member?.name ?? `User ${assignment.userId}`}>
+                            {task.assignments.map((assignment) => (
+                                <Tooltip key={assignment.userId} title={assignment.user?.name ?? `User ${assignment.userId}`}>
                                     <Avatar size="small" icon={<UserOutlined />} />
                                 </Tooltip>
-                            })}
+                            ))}
                         </Avatar.Group>
                     )
                 },
@@ -158,7 +154,6 @@ export function TasksSection(props: { eventId: number }) {
                 eventId={props.eventId}
                 task={task}
                 isTaskManager={isTaskManager}
-                memberById={memberById}
                 open={openTaskId === task.id}
                 onOpenChange={(value) => setOpenTaskId(value ? task.id : null)}
             />
