@@ -3,10 +3,13 @@ kind: Job
 metadata:
   name: knot-migrate
   annotations:
-    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: "1"
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   backoffLimit: 2
+  # fail instead of hanging the Argo sync forever (e.g. missing secret, bad image)
+  activeDeadlineSeconds: 300
   template:
     spec:
       restartPolicy: Never
@@ -27,3 +30,10 @@ spec:
           envFrom:
             - secretRef:
                 name: knot-web-secrets
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

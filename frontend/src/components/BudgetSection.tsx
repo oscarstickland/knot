@@ -1,7 +1,7 @@
 import { Empty, Result, Space, Statistic, Table, Tag, Typography, theme, type TableProps } from "antd";
 import useSWR from "swr";
 import dayjs from "dayjs";
-import type { EventBudgetLine, EventBudgetSummary, ExpenseWithRelations } from "@knot/backend/budget";
+import type { EventBudgetLine, EventBudgetView, ExpenseWithRelations } from "@knot/backend/budget";
 import { useUser } from "@/lib/auth.tsx";
 import { EventBudgetModal } from "@/components/EventBudgetModal.tsx";
 import { ExpenseModal } from "@/components/ExpenseModal.tsx";
@@ -14,23 +14,25 @@ export function BudgetSection(props: { eventId: number }) {
     const { token } = theme.useToken();
     const user = useUser();
     const isBudgetManager = user.role === "admin" || user.role === "exec";
-    const { data, isLoading, error } = useSWR<EventBudgetSummary>(`/events/${props.eventId}/budget`);
+    const { data, isLoading, error } = useSWR<EventBudgetView>(`/events/${props.eventId}/budget`);
 
     if (error) {
         return <Result status="error" title="Retrieval Error" subTitle="Unable to fetch budget." />
     }
 
-    const allocations = data?.allocations ?? [];
+    // Standard members get a reduced view: just the expenses they logged themselves.
+    const summary = data?.scope === "full" ? data : undefined;
+    const categories = summary?.categories ?? [];
     const expenses = data?.expenses ?? [];
-    const totalAllocated = data?.totalAllocated ?? 0;
-    const totalSpent = data?.totalSpent ?? 0;
+    const totalAllocated = summary?.totalAllocated ?? 0;
+    const totalSpent = summary?.totalSpent ?? 0;
     const remaining = totalAllocated - totalSpent;
 
-    const allocationColumns: TableProps<EventBudgetLine>['columns'] = [
+    const categoryColumns: TableProps<EventBudgetLine>['columns'] = [
         {
             key: "category",
             title: "Category",
-            render: (_, line) => line.category.name
+            dataIndex: "name"
         },
         {
             key: "allocated",
@@ -77,19 +79,38 @@ export function BudgetSection(props: { eventId: number }) {
             title: "Amount",
             render: (_, expense) => currency(expense.amount)
         },
-        {
+        ...(isBudgetManager ? [{
             key: "addedBy",
             title: "Added By",
-            render: (_, expense) => expense.creator.name
-        },
-        ...(isBudgetManager ? [{
+            render: (_: unknown, expense: ExpenseWithRelations) => expense.creator.name
+        }] : []),
+        {
             key: "actions",
             title: "",
-            render: (_: unknown, expense: ExpenseWithRelations) => (
+            render: (_, expense) => (
                 <ExpenseModal mode="update" eventId={props.eventId} expense={expense} />
             )
-        }] : [])
+        }
     ];
+
+    const expensesTable = <>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+            <Text strong>{isBudgetManager ? "Expenses" : "My Expenses"}</Text>
+            <ExpenseModal mode="create" eventId={props.eventId} />
+        </div>
+        <Table
+            rowKey="id"
+            loading={isLoading}
+            columns={expenseColumns}
+            dataSource={expenses}
+            pagination={false}
+            locale={{ emptyText: <Empty description="No expenses logged yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+        />
+    </>;
+
+    if (!isBudgetManager) {
+        return <div>{expensesTable}</div>
+    }
 
     return <div>
         <Space size="large" style={{ marginBottom: "24px" }}>
@@ -106,34 +127,18 @@ export function BudgetSection(props: { eventId: number }) {
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
             <Text strong>Category Budgets</Text>
-            {isBudgetManager && (
-                <EventBudgetModal
-                    eventId={props.eventId}
-                    currentAllocations={allocations.map((line) => ({ categoryId: line.categoryId, allocatedAmount: line.allocatedAmount }))}
-                />
-            )}
+            <EventBudgetModal eventId={props.eventId} categories={categories} />
         </div>
         <Table
             rowKey="id"
             loading={isLoading}
-            columns={allocationColumns}
-            dataSource={allocations}
+            columns={categoryColumns}
+            dataSource={categories}
             pagination={false}
-            locale={{ emptyText: <Empty description="No budget assigned yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+            locale={{ emptyText: <Empty description="No budget categories yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
             style={{ marginBottom: "32px" }}
         />
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-            <Text strong>Expenses</Text>
-            {isBudgetManager && <ExpenseModal mode="create" eventId={props.eventId} />}
-        </div>
-        <Table
-            rowKey="id"
-            loading={isLoading}
-            columns={expenseColumns}
-            dataSource={expenses}
-            pagination={false}
-            locale={{ emptyText: <Empty description="No expenses logged yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-        />
+        {expensesTable}
     </div>
 }

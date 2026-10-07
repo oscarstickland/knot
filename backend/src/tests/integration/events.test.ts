@@ -1,6 +1,7 @@
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect } from "bun:test";
 import { type TestDatabaseHarness, setupHarness } from "../harness.ts";
-import { eventsTable } from "../../db/schema.ts";
+import { eventsTable, tasksTable } from "../../db/schema.ts";
+import type { ClubEventWithTaskProgress } from "../../types/events.ts";
 
 describe("Database Integration Test", () => {
     let harness: TestDatabaseHarness;
@@ -616,6 +617,69 @@ describe("Database Integration Test", () => {
 
             const body = await res.json() as { id: number }[];
             expect(body.map((event) => event.id).sort()).toEqual([club1Events.active.id, club1Events.archived.id].sort());
+        });
+
+        it("includes completed and total task counts for each event", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { user, cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+            const { active } = await seedEvents(harness, club.id);
+
+            await harness.db.insert(tasksTable).values([
+                { eventId: active.id, title: "Done", description: "Description", createdBy: user.id, progress: "completed" },
+                { eventId: active.id, title: "Also Done", description: "Description", createdBy: user.id, progress: "completed" },
+                { eventId: active.id, title: "In Review", description: "Description", createdBy: user.id, progress: "in_review" },
+                { eventId: active.id, title: "Backlog", description: "Description", createdBy: user.id, progress: "backlog" }
+            ]);
+
+            const res = await app.request("/api/events?archived=false", {
+                method: "GET",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as ClubEventWithTaskProgress[];
+            expect(body[0]?.taskProgress).toEqual({ total: 4, completed: 2 });
+        });
+
+        it("reports zero task progress for an event with no tasks", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+            await seedEvents(harness, club.id);
+
+            const res = await app.request("/api/events?archived=false", {
+                method: "GET",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as ClubEventWithTaskProgress[];
+            expect(body[0]?.taskProgress).toEqual({ total: 0, completed: 0 });
+        });
+
+        it("counts tasks separately for each event", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { user, cookie } = await harness.setupUser("test@test.com", "admin", club.id, "User");
+            const { active, archived } = await seedEvents(harness, club.id);
+
+            await harness.db.insert(tasksTable).values([
+                { eventId: active.id, title: "Active Done", description: "Description", createdBy: user.id, progress: "completed" },
+                { eventId: archived.id, title: "Archived Open", description: "Description", createdBy: user.id, progress: "backlog" },
+                { eventId: archived.id, title: "Archived Open 2", description: "Description", createdBy: user.id, progress: "in_progress" }
+            ]);
+
+            const res = await app.request("/api/events?archived=all", {
+                method: "GET",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as ClubEventWithTaskProgress[];
+            const progressById = new Map(body.map((event) => [event.id, event.taskProgress]));
+            expect(progressById.get(active.id)).toEqual({ total: 1, completed: 1 });
+            expect(progressById.get(archived.id)).toEqual({ total: 2, completed: 0 });
         });
     });
 

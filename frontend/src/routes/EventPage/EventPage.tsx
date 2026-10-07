@@ -125,9 +125,9 @@ function EventInformation(props: { id: string }) {
 
     return <>
         {contextHolder}
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <div>
-                <Space align="center" style={{ marginBottom: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1em" }}>
+            <div style={{ minWidth: 0 }}>
+                <Space align="center" wrap style={{ marginBottom: 8 }}>
                     <Title level={2} style={{ margin: 0 }}>{data.name}</Title>
                     { data.archived ? <Tag>Archived</Tag> : "" }
                 </Space>
@@ -149,7 +149,7 @@ function EventInformation(props: { id: string }) {
             </div>
 
             { isEventManager
-                ? <Space>
+                ? <Space wrap>
                     <Button
                         icon={data.attendanceOpen ? <LockOutlined /> : <UnlockOutlined />}
                         onClick={toggleAttendanceOpen}

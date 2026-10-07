@@ -8,7 +8,7 @@ COPY bun.lock ./
 COPY frontend/package.json ./frontend/package.json
 COPY backend/package.json ./backend/package.json
 
-RUN cd frontend && bun install
+RUN cd frontend && bun install --frozen-lockfile
 
 # Now - copy both the frontend and the backend
 # note - copying the backend is required, as the frontend depends on the backend
@@ -30,12 +30,13 @@ COPY backend/package.json ./backend/package.json
 
 RUN cd backend && bun install --production --frozen-lockfile
 
-RUN addgroup -S knot && adduser -S knot -G knot
+# fixed numeric UID/GID so k8s runAsNonRoot can verify the user
+RUN addgroup -S -g 10001 knot && adduser -S -u 10001 -G knot knot
 
 COPY --chown=knot:knot backend ./backend/
 COPY --chown=knot:knot --from=frontend-builder /src/frontend/dist backend/dist
 
-USER knot
+USER 10001:10001
 
 WORKDIR /src/backend
 

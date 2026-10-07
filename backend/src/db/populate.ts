@@ -4,7 +4,6 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import {
     budgetCategoriesTable,
     clubsTable,
-    eventBudgetsTable,
     eventsTable,
     expensesTable,
     relations,
@@ -200,22 +199,15 @@ async function generateData() {
     ]);
 
     console.log("-- Inserting Budget Categories");
-    const [venueCategory, cateringCategory, marketingCategory, equipmentCategory] = await db
+    const [venueCategory, cateringCategory, marketingCategory] = await db
         .insert(budgetCategoriesTable)
         .values([
-            { clubId: insertedClub1!.id, name: "Venue" },
-            { clubId: insertedClub1!.id, name: "Catering" },
-            { clubId: insertedClub1!.id, name: "Marketing" },
-            { clubId: insertedClub1!.id, name: "Equipment" }
+            { eventId: insertedEvent1!.id, name: "Venue", allocatedAmount: 500 },
+            { eventId: insertedEvent1!.id, name: "Catering", allocatedAmount: 300 },
+            { eventId: insertedEvent1!.id, name: "Marketing", allocatedAmount: 150 },
+            { eventId: insertedEvent1!.id, name: "Equipment", allocatedAmount: 0 }
         ])
         .returning();
-
-    console.log("-- Inserting Event Budgets");
-    await db.insert(eventBudgetsTable).values([
-        { eventId: insertedEvent1!.id, categoryId: venueCategory!.id, allocatedAmount: 500 },
-        { eventId: insertedEvent1!.id, categoryId: cateringCategory!.id, allocatedAmount: 300 },
-        { eventId: insertedEvent1!.id, categoryId: marketingCategory!.id, allocatedAmount: 150 }
-    ]);
 
     console.log("-- Inserting Expenses");
     await db.insert(expensesTable).values([

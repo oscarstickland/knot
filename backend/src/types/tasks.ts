@@ -54,8 +54,17 @@ export type TaskCommentWithAuthor = TaskComment & {
     author: { id: number; name: string } | null;
 };
 
+export type TaskAssignee = {
+    id: number;
+    name: string;
+};
+
+export type TaskAssignmentWithUser = TaskAssignment & {
+    user: TaskAssignee | null;
+};
+
 export type TaskWithRelations = Task & {
-    assignments: TaskAssignment[];
+    assignments: TaskAssignmentWithUser[];
     dependsOn: TaskDependency[];
     documents: TaskDocument[];
     event: ClubEvent;

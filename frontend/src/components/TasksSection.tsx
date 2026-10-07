@@ -4,8 +4,6 @@ import {
     Button,
     Divider,
     Empty,
-    Form,
-    Input,
     Result,
     Select,
     Space,
@@ -13,20 +11,11 @@ import {
     Tag,
     Tooltip,
     Typography,
-    notification,
     theme,
     type TableProps
 } from "antd";
 import useSWR, { mutate } from "swr";
-import { Controller, useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import {
-    AddTaskDocumentSchema,
-    taskProgressStates,
-    type TaskWithRelations
-} from "@knot/backend/tasks";
-import type { ClubMember } from "@knot/backend/user";
+import { taskProgressStates, type TaskWithRelations } from "@knot/backend/tasks";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
 import { useUser } from "@/lib/auth.tsx";
 import { TaskModal } from "@/components/TaskModal.tsx";
@@ -35,15 +24,8 @@ import dayjs from "dayjs";
 import { CommentOutlined, EditOutlined, LinkOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
 import { progressColor, progressLabel } from "@/components/TaskStatusPill.tsx";
 import { useAppNotification } from "@/lib/useAppNotification";
-import useApp from "antd/es/app/useApp";
 
 const { Text } = Typography;
-
-const priorityColor: Record<string, string> = {
-    low: "default",
-    medium: "gold",
-    high: "red"
-};
 
 const progressOptions = taskProgressStates.map((progress) => ({
     label: progressLabel(progress),
@@ -55,8 +37,8 @@ export function TasksSection(props: { eventId: number }) {
     const user = useUser();
     const isTaskManager = user.role === "admin" || user.role === "exec";
     const { data: tasks, isLoading, error } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${props.eventId}`);
-    const { data: members } = useSWR<ClubMember[]>(isTaskManager ? "/user" : null);
-    const memberById = new Map((members ?? []).map((member) => [member.id, member]));
+    const taskById = new Map((tasks ?? []).map((task) => [task.id, task]));
+    const [openTaskId, setOpenTaskId] = useState<number | null>(null);
 
     if (error) {
         return <Result status="error" title="Retrieval Error" subTitle="Something went wrong loading tasks for this event. Try refreshing the page." />
@@ -69,21 +51,31 @@ export function TasksSection(props: { eventId: number }) {
             justifyContent: 'flex-end',
             paddingBottom: "16px"
         }}>
-            { isTaskManager ? <TaskModal mode="create" eventId={props.eventId} /> : "" }
+            { isTaskManager ? <TaskDrawer mode="create" eventId={props.eventId} /> : "" }
         </div>
 
         <Table
             rowKey="id"
+            size="small"
             loading={isLoading}
             dataSource={tasks ?? []}
             pagination={false}
+            scroll={{ x: "max-content" }}
             locale={{ emptyText: <Empty description="No tasks yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-            expandable={{
-                expandedRowRender: (task) => (
-                    <TaskDetailsRow task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
-                )
-            }}
+            onRow={(task) => ({
+                onClick: () => setOpenTaskId(task.id),
+                style: { cursor: "pointer" }
+            })}
             columns={[
+                {
+                    key: "complete",
+                    width: 36,
+                    render: (_, task) => (
+                        <div onClick={(e) => e.stopPropagation()}>
+                            <CompleteCheckbox task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
+                        </div>
+                    )
+                },
                 {
                     key: "title",
                     title: "Task",
@@ -104,6 +96,7 @@ export function TasksSection(props: { eventId: number }) {
                     title: "Priority",
                     dataIndex: "priority",
                     width: 110,
+                    responsive: ["sm"],
                     render: (priority) => <Tag color={priorityColor[priority]}>{priority.toUpperCase()}</Tag>
                 },
                 {
@@ -112,21 +105,40 @@ export function TasksSection(props: { eventId: number }) {
                     dataIndex: "progress",
                     width: 170,
                     render: (_, task) => (
-                        <ProgressSelect task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
+                        <div onClick={(e) => e.stopPropagation()}>
+                            <ProgressSelect task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
+                        </div>
                     )
+                },
+                {
+                    key: "dependsOn",
+                    title: "Depends On",
+                    width: 160,
+                    responsive: ["xl"],
+                    render: (_, task) => task.dependsOn.length === 0
+                        ? <Text type="secondary">—</Text>
+                        : <Space size={[4, 4]} wrap>
+                            {task.dependsOn.map((dependency) => {
+                                const dependencyTask = taskById.get(dependency.dependsOnTaskId);
+                                const isBlocked = dependencyTask?.progress !== "completed";
+                                return <Tag key={dependency.dependsOnTaskId} color={isBlocked ? "red" : "green"}>
+                                    {dependencyTask?.title ?? `Task ${dependency.dependsOnTaskId}`}
+                                </Tag>
+                            })}
+                        </Space>
                 },
                 {
                     key: "assignees",
                     title: "Assignees",
                     width: 130,
+                    responsive: ["lg"],
                     render: (_, task) => (
                         <Avatar.Group max={{ count: 3 }}>
-                            {task.assignments.map((assignment) => {
-                                const member = memberById.get(assignment.userId);
-                                return <Tooltip key={assignment.userId} title={member?.name ?? `User ${assignment.userId}`}>
+                            {task.assignments.map((assignment) => (
+                                <Tooltip key={assignment.userId} title={assignment.user?.name ?? `User ${assignment.userId}`}>
                                     <Avatar size="small" icon={<UserOutlined />} />
                                 </Tooltip>
-                            })}
+                            ))}
                         </Avatar.Group>
                     )
                 },
@@ -134,44 +146,64 @@ export function TasksSection(props: { eventId: number }) {
                     key: "dueDate",
                     title: "Due",
                     width: 150,
+                    responsive: ["md"],
                     render: (_, task) => task.dueDate
                         ? <Text style={{ color: token.colorTextSecondary }}>{dayjs(task.dueDate).format("D MMM YYYY")}</Text>
                         : <Text type="secondary">—</Text>
-                },
-                {
-                    key: "actions",
-                    title: "",
-                    width: 40,
-                    render: (_, task) => isTaskManager
-                        ? <TaskModal
-                            mode="update"
-                            eventId={props.eventId}
-                            task={task}
-                            trigger={<Button size="small" type="text" icon={<EditOutlined />} />}
-                        />
-                        : null
                 }
             ] as TableProps<TaskWithRelations>['columns']}
         />
+
+        {(tasks ?? []).map((task) => (
+            <TaskDrawer
+                key={task.id}
+                mode="update"
+                eventId={props.eventId}
+                task={task}
+                isTaskManager={isTaskManager}
+                open={openTaskId === task.id}
+                onOpenChange={(value) => setOpenTaskId(value ? task.id : null)}
+            />
+        ))}
     </div>
 }
 
-function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
+function useTaskProgress(task: TaskWithRelations, eventId: number) {
     const user = useUser();
     const [api, contextHolder] = useAppNotification();
-    const isAssigned = props.task.assignments.some((assignment) => assignment.userId === user.id);
-    const canEdit = props.isTaskManager || isAssigned;
+    const isAssigned = task.assignments.some((assignment) => assignment.userId === user.id);
 
     const updateProgress = (progress: string) => {
-        AxiosInstance.patch(`/tasks/${props.task.id}/progress`, { progress })
+        AxiosInstance.patch(`/tasks/${task.id}/progress`, { progress })
             .then(async () => {
-                await mutate(`/tasks?eventId=${props.eventId}`);
+                await mutate(`/tasks?eventId=${eventId}`);
             })
             .catch((err) => {
                 const message = err?.response?.data?.message ?? "Task progress could not be updated.";
                 api["error"]({ title: "Error", description: message });
             });
     }
+
+    return { isAssigned, updateProgress, contextHolder };
+}
+
+function CompleteCheckbox(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
+    const { isAssigned, updateProgress, contextHolder } = useTaskProgress(props.task, props.eventId);
+    const canEdit = props.isTaskManager || isAssigned;
+
+    return <>
+        {contextHolder}
+        <Checkbox
+            disabled={!canEdit}
+            checked={props.task.progress === "completed"}
+            onChange={(e) => updateProgress(e.target.checked ? "completed" : "in_progress")}
+        />
+    </>
+}
+
+function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
+    const { isAssigned, updateProgress, contextHolder } = useTaskProgress(props.task, props.eventId);
+    const canEdit = props.isTaskManager || isAssigned;
 
     if (!canEdit) return <>
         {contextHolder}

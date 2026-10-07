@@ -28,3 +28,12 @@ export type UpdateEventData = z.infer<typeof UpdateEventSchema>;
 export type ArchiveEventData = z.infer<typeof ArchiveEventSchema>;
 export type SetAttendanceOpenData = z.infer<typeof SetAttendanceOpenSchema>;
 export type ClubEvent = typeof eventsTable.$inferSelect;
+
+export type EventTaskProgress = {
+    total: number;
+    completed: number;
+};
+
+export type ClubEventWithTaskProgress = ClubEvent & {
+    taskProgress: EventTaskProgress;
+};

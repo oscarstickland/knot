@@ -20,6 +20,7 @@ import {
 } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
 import { describeZodError } from "../types/errors.ts";
+import { findCyclicDependency } from "../services/task-dependencies.ts";
 
 type Db = DbEnv["Variables"]["db"];
 
@@ -29,6 +30,12 @@ tasksApp.use("*", isAuthenticated);
 function isExecOrAdmin(role: string): boolean {
     return role === "exec" || role === "admin";
 }
+
+// Assignee names are included so members without access to the full member list
+// can still see who a task is assigned to.
+const assignmentsWithUser = {
+    with: { user: { columns: { id: true, name: true } } }
+} as const;
 
 async function loadClubTask(db: Db, taskId: number, clubId: number) {
     const task = await db.query.tasksTable.findFirst({
@@ -107,33 +114,14 @@ async function assertNoDependencyCycle(db: Db, eventId: number, taskId: number, 
         .innerJoin(tasksTable, eq(tasksTable.id, taskDependenciesTable.taskId))
         .where(eq(tasksTable.eventId, eventId));
 
-    const adjacency = new Map<number, number[]>();
-    for (const dependency of existingDependencies) {
-        if (dependency.taskId === taskId) continue;
-        const existing = adjacency.get(dependency.taskId) ?? [];
-        existing.push(dependency.dependsOnTaskId);
-        adjacency.set(dependency.taskId, existing);
-    }
+    const cyclicDependencyId = findCyclicDependency(existingDependencies, taskId, dependencyIds);
+    if (cyclicDependencyId === null) return;
 
-    function canReach(from: number, target: number, visited: Set<number>): boolean {
-        if (from === target) return true;
-        if (visited.has(from)) return false;
-        visited.add(from);
-        for (const next of adjacency.get(from) ?? []) {
-            if (canReach(next, target, visited)) return true;
-        }
-        return false;
-    }
-
-    for (const dependencyId of dependencyIds) {
-        if (canReach(dependencyId, taskId, new Set())) {
-            const dependencyTask = await db.query.tasksTable.findFirst({ where: { id: dependencyId } });
-            const dependencyName = dependencyTask?.title ?? `Task ${dependencyId}`;
-            throw new HTTPException(400, {
-                message: `Cannot depend on "${dependencyName}" as it already depends on this task, either directly or transitively`
-            });
-        }
-    }
+    const dependencyTask = await db.query.tasksTable.findFirst({ where: { id: cyclicDependencyId } });
+    const dependencyName = dependencyTask?.title ?? `Task ${cyclicDependencyId}`;
+    throw new HTTPException(400, {
+        message: `Cannot depend on "${dependencyName}" as it already depends on this task, either directly or transitively`
+    });
 }
 
 async function assertDependenciesCompleted(db: Db, taskId: number, taskTitle: string) {
@@ -164,7 +152,7 @@ tasksApp.get("/", async (c) => {
 
     const tasks = await db.query.tasksTable.findMany({
         where: { eventId },
-        with: { assignments: true, dependsOn: true, documents: true, comments: { columns: { id: true } } }
+        with: { assignments: assignmentsWithUser, dependsOn: true, documents: true }
     });
 
     return c.json(tasks.map(withCommentCount));
