@@ -19,7 +19,7 @@ import { AxiosInstance } from "@/lib/fetcher.tsx";
 import { useUser } from "@/lib/auth.tsx";
 import { TaskDrawer } from "@/components/TaskDrawer.tsx";
 import dayjs from "dayjs";
-import { UserOutlined } from "@ant-design/icons";
+import { CommentOutlined, UserOutlined } from "@ant-design/icons";
 import { priorityColor, progressColor, progressLabel } from "@/components/TaskStatusPill.tsx";
 import { useAppNotification } from "@/lib/useAppNotification";
 
@@ -80,6 +80,11 @@ export function TasksSection(props: { eventId: number }) {
                     dataIndex: "title",
                     render: (title, task) => <div>
                         <Text strong delete={task.progress === "completed"}>{title}</Text>
+                        {task.commentCount > 0 && <Tooltip title={`${task.commentCount} comment${task.commentCount === 1 ? "" : "s"}`}>
+                            <Text type="secondary" style={{ fontSize: "12px", marginLeft: "8px" }}>
+                                <CommentOutlined /> {task.commentCount}
+                            </Text>
+                        </Tooltip>}
                         <br />
                         <Text type="secondary" style={{ fontSize: "12px" }}>{task.description}</Text>
                     </div>

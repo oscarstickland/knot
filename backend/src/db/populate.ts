@@ -9,6 +9,7 @@ import {
     relations,
     taskAssignmentsTable,
     taskAuditLogTable,
+    taskCommentsTable,
     taskDependenciesTable,
     taskDocumentsTable,
     tasksTable,
@@ -166,6 +167,36 @@ async function generateData() {
         action: "created",
         changes: task1
     });
+
+    console.log("-- Inserting Task Comments");
+    const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000);
+    await db.insert(taskCommentsTable).values([
+        {
+            taskId: insertedTask1!.id,
+            authorId: insertedUser1!.id,
+            body: "Have we heard back from the venue about the deposit amount?",
+            createdAt: hoursAgo(26)
+        },
+        {
+            taskId: insertedTask1!.id,
+            authorId: insertedUser2!.id,
+            body: "Yes - it's $200, due by Friday. I'll pay it once the budget is approved.",
+            createdAt: hoursAgo(24),
+            updatedAt: hoursAgo(23)
+        },
+        {
+            taskId: insertedTask1!.id,
+            authorId: insertedUser1!.id,
+            body: "Approved, go ahead.",
+            createdAt: hoursAgo(3)
+        },
+        {
+            taskId: insertedTask2!.id,
+            authorId: insertedUser3!.id,
+            body: "Waiting on the venue booking before sending these out.",
+            createdAt: hoursAgo(2)
+        }
+    ]);
 
     console.log("-- Inserting Budget Categories");
     const [venueCategory, cateringCategory, marketingCategory] = await db

@@ -17,6 +17,7 @@ import { z } from "zod";
 import { useAppNotification } from "@/lib/useAppNotification";
 import { priorityColor, TaskStatusPill } from "@/components/TaskStatusPill.tsx";
 import { buildDependencyOptions } from "@/lib/taskDependencies.ts";
+import { TaskComments } from "@/components/TaskComments.tsx";
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -301,5 +302,7 @@ function TaskSummary(props: {
                 }
             </div>
         </div>
+
+        <TaskComments taskId={task.id} eventId={task.eventId} />
     </Space>
 }

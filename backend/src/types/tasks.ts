@@ -1,4 +1,4 @@
-import type { tasksTable, taskAuditLogTable, taskDocumentsTable, taskAssignmentsTable, taskDependenciesTable } from "../db/schema.ts";
+import type { tasksTable, taskAuditLogTable, taskDocumentsTable, taskAssignmentsTable, taskDependenciesTable, taskCommentsTable } from "../db/schema.ts";
 import { taskPriorities, taskProgressStates } from "../db/schema.ts";
 import { z } from "zod";
 import type { ClubEvent } from "./events.ts";
@@ -26,16 +26,33 @@ export const AddTaskDocumentSchema = z.object({
     url: z.string().url()
 });
 
+const CommentBodySchema = z.string()
+    .trim()
+    .min(1, "Comment cannot be empty")
+    .max(2000, "Comment must be 2000 characters or fewer");
+
+export const CreateTaskCommentSchema = z.object({
+    body: CommentBodySchema
+});
+export const UpdateTaskCommentSchema = CreateTaskCommentSchema;
+
 export type CreateTaskData = z.infer<typeof CreateTaskSchema>;
 export type UpdateTaskData = z.infer<typeof UpdateTaskSchema>;
 export type UpdateTaskProgressData = z.infer<typeof UpdateTaskProgressSchema>;
 export type AddTaskDocumentData = z.infer<typeof AddTaskDocumentSchema>;
+export type CreateTaskCommentData = z.infer<typeof CreateTaskCommentSchema>;
+export type UpdateTaskCommentData = z.infer<typeof UpdateTaskCommentSchema>;
 
 export type Task = typeof tasksTable.$inferSelect;
 export type TaskDocument = typeof taskDocumentsTable.$inferSelect;
 export type TaskAuditLogEntry = typeof taskAuditLogTable.$inferSelect;
 export type TaskAssignment = typeof taskAssignmentsTable.$inferSelect;
 export type TaskDependency = typeof taskDependenciesTable.$inferSelect;
+export type TaskComment = typeof taskCommentsTable.$inferSelect;
+
+export type TaskCommentWithAuthor = TaskComment & {
+    author: { id: number; name: string } | null;
+};
 
 export type TaskAssignee = {
     id: number;
@@ -51,6 +68,7 @@ export type TaskWithRelations = Task & {
     dependsOn: TaskDependency[];
     documents: TaskDocument[];
     event: ClubEvent;
+    commentCount: number;
 };
 
 export type TaskDetail = TaskWithRelations & {
