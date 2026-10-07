@@ -4,13 +4,16 @@ import type { DbEnv } from "../db/connection.ts";
 import { HTTPException } from "hono/http-exception";
 import {
     AddTaskDocumentSchema,
+    CreateTaskCommentSchema,
     CreateTaskSchema,
+    UpdateTaskCommentSchema,
     UpdateTaskProgressSchema,
     UpdateTaskSchema
 } from "../types/tasks.ts";
 import {
     taskAssignmentsTable,
     taskAuditLogTable,
+    taskCommentsTable,
     taskDependenciesTable,
     taskDocumentsTable,
     tasksTable
@@ -35,6 +38,19 @@ async function loadClubTask(db: Db, taskId: number, clubId: number) {
 
     if (!task || !task.event || task.event.clubId !== clubId) return null;
     return task;
+}
+
+async function loadTaskComment(db: Db, taskId: number, commentId: number) {
+    const comment = await db.query.taskCommentsTable.findFirst({
+        where: { id: commentId, taskId }
+    });
+    return comment ?? null;
+}
+
+// Replaces the loaded comment ids with a count, so list responses stay small.
+function withCommentCount<T extends { comments: { id: number }[] }>(task: T) {
+    const { comments, ...rest } = task;
+    return { ...rest, commentCount: comments.length };
 }
 
 async function isAssignedToTask(db: Db, taskId: number, userId: number): Promise<boolean> {
@@ -148,10 +164,10 @@ tasksApp.get("/", async (c) => {
 
     const tasks = await db.query.tasksTable.findMany({
         where: { eventId },
-        with: { assignments: true, dependsOn: true, documents: true }
+        with: { assignments: true, dependsOn: true, documents: true, comments: { columns: { id: true } } }
     });
 
-    return c.json(tasks);
+    return c.json(tasks.map(withCommentCount));
 });
 
 
@@ -164,10 +180,10 @@ tasksApp.get("/me", async (c) => {
             assignments: { userId: user.id },
             event: { clubId: user.club.id }
         },
-        with: { event: true, assignments: true, dependsOn: true, documents: true }
+        with: { event: true, assignments: true, dependsOn: true, documents: true, comments: { columns: { id: true } } }
     });
 
-    return c.json(tasks);
+    return c.json(tasks.map(withCommentCount));
 })
 
 tasksApp.get("/:id{[0-9]+}", async (c) => {
@@ -177,12 +193,12 @@ tasksApp.get("/:id{[0-9]+}", async (c) => {
 
     const task = await db.query.tasksTable.findFirst({
         where: { id: taskId },
-        with: { event: true, assignments: true, dependsOn: true, documents: true, auditLog: true }
+        with: { event: true, assignments: true, dependsOn: true, documents: true, auditLog: true, comments: { columns: { id: true } } }
     });
 
     if (!task || !task.event || task.event.clubId !== user.club.id) throw new HTTPException(404, { message: "Task not found" });
 
-    return c.json(task);
+    return c.json(withCommentCount(task));
 });
 
 tasksApp.post("/", async (c) => {
@@ -372,6 +388,91 @@ tasksApp.post("/:id{[0-9]+}/documents", async (c) => {
     });
 
     return c.json(document, 201);
+});
+
+tasksApp.get("/:id{[0-9]+}/comments", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+    const taskId = Number(c.req.param("id"));
+
+    const existingTask = await loadClubTask(db, taskId, user.club.id);
+    if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
+
+    const comments = await db.query.taskCommentsTable.findMany({
+        where: { taskId },
+        orderBy: { createdAt: "asc", id: "asc" },
+        with: { author: { columns: { id: true, name: true } } }
+    });
+
+    return c.json(comments);
+});
+
+tasksApp.post("/:id{[0-9]+}/comments", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+    const taskId = Number(c.req.param("id"));
+
+    const existingTask = await loadClubTask(db, taskId, user.club.id);
+    if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
+
+    const body = await c.req.json();
+    const parsed = CreateTaskCommentSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
+
+    const [comment] = await db
+        .insert(taskCommentsTable)
+        .values({ taskId, authorId: user.id, body: parsed.data.body })
+        .returning();
+
+    if (!comment) throw new HTTPException(500, { message: "Failed to add comment" });
+
+    return c.json({ ...comment, author: { id: user.id, name: user.name } }, 201);
+});
+
+tasksApp.put("/:id{[0-9]+}/comments/:commentId{[0-9]+}", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+    const taskId = Number(c.req.param("id"));
+    const commentId = Number(c.req.param("commentId"));
+
+    const existingTask = await loadClubTask(db, taskId, user.club.id);
+    if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
+
+    const existingComment = await loadTaskComment(db, taskId, commentId);
+    if (!existingComment) throw new HTTPException(404, { message: "Comment not found" });
+    if (existingComment.authorId !== user.id) throw new HTTPException(403, { message: "You can only edit your own comments" });
+
+    const body = await c.req.json();
+    const parsed = UpdateTaskCommentSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
+
+    const [comment] = await db
+        .update(taskCommentsTable)
+        .set({ body: parsed.data.body, updatedAt: new Date() })
+        .where(eq(taskCommentsTable.id, commentId))
+        .returning();
+
+    return c.json({ ...comment, author: { id: user.id, name: user.name } });
+});
+
+tasksApp.delete("/:id{[0-9]+}/comments/:commentId{[0-9]+}", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+    const taskId = Number(c.req.param("id"));
+    const commentId = Number(c.req.param("commentId"));
+
+    const existingTask = await loadClubTask(db, taskId, user.club.id);
+    if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
+
+    const existingComment = await loadTaskComment(db, taskId, commentId);
+    if (!existingComment) throw new HTTPException(404, { message: "Comment not found" });
+
+    const allowed = existingComment.authorId === user.id || isExecOrAdmin(user.role);
+    if (!allowed) throw new HTTPException(403, { message: "Only the comment author, club admins, or execs can delete this comment" });
+
+    await db.delete(taskCommentsTable).where(eq(taskCommentsTable.id, commentId));
+
+    return c.json({ message: "Deleted" });
 });
 
 export { tasksApp };

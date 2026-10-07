@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
     Avatar,
     Button,
+    Divider,
     Empty,
     Form,
     Input,
@@ -29,8 +30,9 @@ import type { ClubMember } from "@knot/backend/user";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
 import { useUser } from "@/lib/auth.tsx";
 import { TaskModal } from "@/components/TaskModal.tsx";
+import { TaskComments } from "@/components/TaskComments.tsx";
 import dayjs from "dayjs";
-import { EditOutlined, LinkOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
+import { CommentOutlined, EditOutlined, LinkOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
 import { progressColor, progressLabel } from "@/components/TaskStatusPill.tsx";
 import { useAppNotification } from "@/lib/useAppNotification";
 import useApp from "antd/es/app/useApp";
@@ -88,6 +90,11 @@ export function TasksSection(props: { eventId: number }) {
                     dataIndex: "title",
                     render: (title, task) => <div>
                         <Text strong>{title}</Text>
+                        {task.commentCount > 0 && <Tooltip title={`${task.commentCount} comment${task.commentCount === 1 ? "" : "s"}`}>
+                            <Text type="secondary" style={{ fontSize: "12px", marginLeft: "8px" }}>
+                                <CommentOutlined /> {task.commentCount}
+                            </Text>
+                        </Tooltip>}
                         <br />
                         <Text type="secondary" style={{ fontSize: "12px" }}>{task.description}</Text>
                     </div>
@@ -219,6 +226,9 @@ function TaskDetailsRow(props: { task: TaskWithRelations; eventId: number; isTas
         </div>
 
         {canAddDocument && <AddDocumentForm taskId={props.task.id} eventId={props.eventId} />}
+
+        <Divider style={{ margin: "12px 0" }} />
+        <TaskComments taskId={props.task.id} eventId={props.eventId} />
     </div>
 }
 

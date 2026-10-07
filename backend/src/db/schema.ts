@@ -1,5 +1,5 @@
 import { defineRelations } from "drizzle-orm";
-import {boolean, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, unique, varchar} from "drizzle-orm/pg-core";
+import {boolean, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, unique, varchar} from "drizzle-orm/pg-core";
 
 export const userRoles = ["standard", "exec", "admin"] as const;
 export type UserRole = (typeof userRoles)[number];
@@ -90,6 +90,18 @@ export const taskAuditLogTable = pgTable("task_audit_log", {
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
 });
 
+export const taskCommentsTable = pgTable("task_comments", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    taskId: integer("task_id").notNull(),
+    authorId: integer("author_id").notNull(),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+    // Null until the comment is first edited.
+    updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true }),
+}, (table) => [
+    index("task_comments_task_id_idx").on(table.taskId)
+]);
+
 export const eventAttendanceTable = pgTable("event_attendance", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     eventId: integer("event_id").notNull(),
@@ -137,6 +149,7 @@ export const relations = defineRelations({
     taskDependenciesTable,
     taskDocumentsTable,
     taskAuditLogTable,
+    taskCommentsTable,
     eventAttendanceTable,
     budgetCategoriesTable,
     eventBudgetsTable,
@@ -174,6 +187,7 @@ export const relations = defineRelations({
         assignments: r.many.taskAssignmentsTable(),
         documents: r.many.taskDocumentsTable(),
         auditLog: r.many.taskAuditLogTable(),
+        comments: r.many.taskCommentsTable(),
         dependsOn: r.many.taskDependenciesTable({
             from: r.tasksTable.id,
             to: r.taskDependenciesTable.taskId
@@ -220,6 +234,16 @@ export const relations = defineRelations({
         }),
         changedByUser: r.one.usersTable({
             from: r.taskAuditLogTable.changedBy,
+            to: r.usersTable.id
+        })
+    },
+    taskCommentsTable: {
+        task: r.one.tasksTable({
+            from: r.taskCommentsTable.taskId,
+            to: r.tasksTable.id
+        }),
+        author: r.one.usersTable({
+            from: r.taskCommentsTable.authorId,
             to: r.usersTable.id
         })
     },

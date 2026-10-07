@@ -20,6 +20,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "antd": "^6.6.2"
+    "antd": "^6.6.2",
+    "mprocs": "^0.9.6"
   }
 }
