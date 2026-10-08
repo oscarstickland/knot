@@ -525,6 +525,104 @@ describe("Task Integration Test", () => {
             const body = await res.json() as Task[];
             expect(body).toEqual([]);
         });
+
+        it("includes the title and progress of prerequisite tasks not assigned to the user", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user: member, cookie } = await harness.setupUser("member@test.com", "standard", club.id, "Member");
+
+            const prerequisite = await setupTask(event.id, admin.id, "Book Venue", "in_progress");
+            const task = await setupTask(event.id, admin.id, "Print Flyers");
+            await assignUser(task.id, member.id);
+            await setupDependency(task.id, prerequisite.id);
+
+            const res = await app.request("/api/tasks/me", { headers: { cookie } });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as TaskWithRelations[];
+            expect(body[0]?.dependsOn).toEqual([{
+                taskId: task.id,
+                dependsOnTaskId: prerequisite.id,
+                dependsOnTask: { id: prerequisite.id, title: "Book Venue", progress: "in_progress" }
+            }]);
+        });
+
+        it("includes the tasks waiting on each of the user's tasks", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user: member, cookie } = await harness.setupUser("member@test.com", "standard", club.id, "Member");
+
+            const task = await setupTask(event.id, admin.id, "Book Venue");
+            const dependent = await setupTask(event.id, admin.id, "Print Flyers", "backlog");
+            await assignUser(task.id, member.id);
+            await setupDependency(dependent.id, task.id);
+
+            const res = await app.request("/api/tasks/me", { headers: { cookie } });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as TaskWithRelations[];
+            expect(body[0]?.dependents).toEqual([{
+                taskId: dependent.id,
+                dependsOnTaskId: task.id,
+                task: { id: dependent.id, title: "Print Flyers", progress: "backlog" }
+            }]);
+        });
+
+        it("returns empty dependency lists for a task with no links", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: member, cookie } = await harness.setupUser("member@test.com", "standard", club.id, "Member");
+            const task = await setupTask(event.id, member.id, "Standalone");
+            await assignUser(task.id, member.id);
+
+            const res = await app.request("/api/tasks/me", { headers: { cookie } });
+            const body = await res.json() as TaskWithRelations[];
+            expect(body[0]?.dependsOn).toEqual([]);
+            expect(body[0]?.dependents).toEqual([]);
+        });
+    });
+
+    describe("GET /api/tasks dependency summaries", () => {
+        it("includes prerequisite and dependent task summaries in the event task list", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const prerequisite = await setupTask(event.id, admin.id, "Book Venue", "completed");
+            const task = await setupTask(event.id, admin.id, "Print Flyers");
+            await setupDependency(task.id, prerequisite.id);
+
+            const res = await app.request(`/api/tasks?eventId=${event.id}`, { headers: { cookie } });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as TaskWithRelations[];
+            const byId = new Map(body.map((candidate) => [candidate.id, candidate]));
+            expect(byId.get(task.id)?.dependsOn[0]?.dependsOnTask).toEqual({ id: prerequisite.id, title: "Book Venue", progress: "completed" });
+            expect(byId.get(prerequisite.id)?.dependents[0]?.task).toEqual({ id: task.id, title: "Print Flyers", progress: "backlog" });
+        });
+
+        it("only exposes id, title and progress of linked tasks", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const prerequisite = await setupTask(event.id, admin.id, "Book Venue");
+            const task = await setupTask(event.id, admin.id, "Print Flyers");
+            await setupDependency(task.id, prerequisite.id);
+
+            const res = await app.request(`/api/tasks/${task.id}`, { headers: { cookie } });
+            expect(res.status).toBe(200);
+
+            const body = await res.json() as TaskWithRelations;
+            expect(Object.keys(body.dependsOn[0]?.dependsOnTask ?? {}).sort()).toEqual(["id", "progress", "title"]);
+        });
     });
 
     describe("PATCH /api/tasks/:id/progress (dependency-aware completion)", () => {
