@@ -9,6 +9,7 @@ import { Link } from "react-router";
 import { Listy } from 'antd';
 import type { TaskWithRelations } from "@knot/backend/tasks";
 import { TaskStatusPill } from "@/components/TaskStatusPill.tsx";
+import { TaskDependencyIndicator } from "@/components/TaskDependencyIndicator.tsx";
 import { pluralise } from "@/lib/pluralise.ts";
 
 const { Text, Title } = Typography;
@@ -108,6 +109,11 @@ function UpcomingTaskList(props: { tasks: TaskWithRelations[] }) {
                 render: (_, record) => {
                     return <TaskStatusPill task={record} />
                 }
+            },
+            {
+                key: "dependencies",
+                title: "Dependencies",
+                render: (_, record) => <TaskDependencyIndicator task={record} fallback={<Text type="secondary">—</Text>} />
             },
             {
                 key: "due",

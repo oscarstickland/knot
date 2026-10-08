@@ -46,9 +46,21 @@ export type TaskAssignmentWithUser = TaskAssignment & {
     user: TaskAssignee | null;
 };
 
+// Minimal view of a task on the other side of a dependency link.
+export type LinkedTaskSummary = Pick<Task, "id" | "title" | "progress">;
+
+export type TaskPrerequisite = TaskDependency & {
+    dependsOnTask: LinkedTaskSummary | null;
+};
+
+export type TaskDependent = TaskDependency & {
+    task: LinkedTaskSummary | null;
+};
+
 export type TaskWithRelations = Task & {
     assignments: TaskAssignmentWithUser[];
-    dependsOn: TaskDependency[];
+    dependsOn: TaskPrerequisite[];
+    dependents: TaskDependent[];
     documents: TaskDocument[];
     event: ClubEvent;
 };
