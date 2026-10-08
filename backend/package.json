@@ -16,6 +16,7 @@
     "./auth": "./src/types/auth.ts",
     "./budget": "./src/types/budget.ts",
     "./events": "./src/types/events.ts",
+    "./event-documents": "./src/types/event-documents.ts",
     "./event-attendance": "./src/types/event-attendance.ts",
     "./tasks": "./src/types/tasks.ts",
     "./task-dependencies": "./src/services/task-dependencies.ts",
