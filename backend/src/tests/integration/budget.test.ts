@@ -1,7 +1,7 @@
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect } from "bun:test";
 import { type TestDatabaseHarness, setupHarness } from "../harness.ts";
 import { budgetCategoriesTable, eventsTable, expensesTable } from "../../db/schema.ts";
-import type { EventBudgetSummary, EventSpending, Expense, MemberBudgetView } from "../../types/budget.ts";
+import type { CategorySpendingSummary, EventBudgetSummary, EventSpending, Expense, MemberBudgetView } from "../../types/budget.ts";
 
 type HTTPError = {
     message: string
@@ -800,6 +800,225 @@ describe("Budget Integration Test", () => {
             expect(res.status).toBe(200);
             const body = await res.json() as EventSpending[];
             expect(body).toEqual([]);
+        });
+    });
+
+    describe("GET /api/budget/categories (category dashboard)", () => {
+        async function getCategories(app: Awaited<ReturnType<TestDatabaseHarness["setupApp"]>>, cookie: string, query: string = "") {
+            return app.request(`/api/budget/categories${query}`, { headers: { cookie } });
+        }
+
+        it("rejects unauthenticated requests", async () => {
+            const app = await harness.setupApp();
+
+            const res = await app.request("/api/budget/categories");
+            expect(res.status).toBe(401);
+        });
+
+        it("prevents standard users from viewing category spending", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+
+            const res = await getCategories(app, cookie);
+            expect(res.status).toBe(403);
+        });
+
+        it.each(["exec", "admin"])("allows %s to view category spending", async (role) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("actor@test.com", role, club.id, "Actor");
+
+            const res = await getCategories(app, cookie);
+            expect(res.status).toBe(200);
+        });
+
+        it("returns empty totals when the club has no budget data", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            await setupEvent(club.id);
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const res = await getCategories(app, cookie);
+            const body = await res.json() as CategorySpendingSummary;
+            expect(body).toEqual({ categories: [], totalAllocated: 0, totalSpent: 0 });
+        });
+
+        it("merges categories with the same name across events, ignoring case and whitespace", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const older = await setupEvent(club.id, { name: "Older", start: new Date("2026-01-01T10:00:00Z") });
+            const middle = await setupEvent(club.id, { name: "Middle", start: new Date("2026-03-01T10:00:00Z") });
+            const newest = await setupEvent(club.id, { name: "Newest", start: new Date("2026-06-01T10:00:00Z") });
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const olderVenue = await setupCategory(older.id, "VENUE", 100);
+            await setupCategory(middle.id, "venue ", 200);
+            const newestVenue = await setupCategory(newest.id, "Venue", 300);
+            await setupExpense(older.id, olderVenue.id, admin.id, 50);
+            await setupExpense(newest.id, newestVenue.id, admin.id, 75);
+
+            const res = await getCategories(app, cookie);
+            const body = await res.json() as CategorySpendingSummary;
+
+            expect(body.categories.length).toBe(1);
+            expect(body.categories[0]).toMatchObject({
+                key: "venue",
+                name: "Venue",
+                totalAllocated: 600,
+                totalSpent: 125
+            });
+            expect(body.categories[0]!.events.map((event) => event.name)).toEqual(["Newest", "Middle", "Older"]);
+        });
+
+        it("does not multiply allocations by the number of expenses", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const venue = await setupCategory(event.id, "Venue", 100);
+            await setupExpense(event.id, venue.id, admin.id, 10);
+            await setupExpense(event.id, venue.id, admin.id, 20);
+            await setupExpense(event.id, venue.id, admin.id, 30);
+
+            const res = await getCategories(app, cookie);
+            const body = await res.json() as CategorySpendingSummary;
+
+            expect(body.categories[0]).toMatchObject({ totalAllocated: 100, totalSpent: 60 });
+            expect(body).toMatchObject({ totalAllocated: 100, totalSpent: 60 });
+        });
+
+        it("reports zero spend for categories with an allocation but no expenses", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            await setupCategory(event.id, "Marketing", 150);
+
+            const res = await getCategories(app, cookie);
+            const body = await res.json() as CategorySpendingSummary;
+
+            expect(body.categories[0]).toMatchObject({ name: "Marketing", totalAllocated: 150, totalSpent: 0 });
+        });
+
+        it("sums decimal amounts without floating point drift", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const catering = await setupCategory(event.id, "Catering", 0);
+            await setupExpense(event.id, catering.id, admin.id, 10.10);
+            await setupExpense(event.id, catering.id, admin.id, 20.20);
+
+            const res = await getCategories(app, cookie);
+            const body = await res.json() as CategorySpendingSummary;
+
+            expect(body.categories[0]!.totalSpent).toBe(30.3);
+        });
+
+        it("sorts categories by total spent, highest first", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const venue = await setupCategory(event.id, "Venue", 0);
+            const catering = await setupCategory(event.id, "Catering", 0);
+            await setupCategory(event.id, "Equipment", 500);
+            await setupExpense(event.id, venue.id, admin.id, 40);
+            await setupExpense(event.id, catering.id, admin.id, 90);
+
+            const res = await getCategories(app, cookie);
+            const body = await res.json() as CategorySpendingSummary;
+
+            expect(body.categories.map((category) => category.name)).toEqual(["Catering", "Venue", "Equipment"]);
+        });
+
+        it("breaks each category down per event, matching the category totals", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const eventOne = await setupEvent(club.id, { name: "One", start: new Date("2026-01-01T10:00:00Z") });
+            const eventTwo = await setupEvent(club.id, { name: "Two", start: new Date("2026-02-01T10:00:00Z") });
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const venueOne = await setupCategory(eventOne.id, "Venue", 300);
+            const venueTwo = await setupCategory(eventTwo.id, "Venue", 200);
+            await setupExpense(eventOne.id, venueOne.id, admin.id, 150);
+            await setupExpense(eventTwo.id, venueTwo.id, admin.id, 50);
+
+            const res = await getCategories(app, cookie);
+            const body = await res.json() as CategorySpendingSummary;
+            const venue = body.categories[0]!;
+
+            expect(venue.events).toEqual([
+                { eventId: eventTwo.id, name: "Two", start: "2026-02-01T10:00:00.000Z", allocated: 200, spent: 50 },
+                { eventId: eventOne.id, name: "One", start: "2026-01-01T10:00:00.000Z", allocated: 300, spent: 150 }
+            ]);
+            expect(venue.events.reduce((sum, event) => sum + event.spent, 0)).toBe(venue.totalSpent);
+            expect(venue.events.reduce((sum, event) => sum + event.allocated, 0)).toBe(venue.totalAllocated);
+        });
+
+        it("includes archived events", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id, { archived: true });
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            await setupCategory(event.id, "Venue", 80);
+
+            const res = await getCategories(app, cookie);
+            const body = await res.json() as CategorySpendingSummary;
+
+            expect(body.totalAllocated).toBe(80);
+        });
+
+        it("does not include categories or expenses from another club", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const otherClub = await harness.setupClub("Other Club");
+            const event = await setupEvent(club.id);
+            const otherEvent = await setupEvent(otherClub.id);
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user: otherAdmin } = await harness.setupUser("other@test.com", "admin", otherClub.id, "Other");
+            await setupCategory(event.id, "Venue", 100);
+            const otherVenue = await setupCategory(otherEvent.id, "Venue", 999);
+            await setupCategory(otherEvent.id, "Foreign Category", 50);
+            await setupExpense(otherEvent.id, otherVenue.id, otherAdmin.id, 500);
+
+            const res = await getCategories(app, cookie);
+            const body = await res.json() as CategorySpendingSummary;
+
+            expect(body.categories.map((category) => category.name)).toEqual(["Venue"]);
+            expect(body).toMatchObject({ totalAllocated: 100, totalSpent: 0 });
+        });
+
+        it("filters by event start date, inclusive of both ends", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const before = await setupEvent(club.id, { start: new Date("2026-01-31T23:59:59Z") });
+            const onFrom = await setupEvent(club.id, { start: new Date("2026-02-01T00:00:00Z") });
+            const onTo = await setupEvent(club.id, { start: new Date("2026-02-28T00:00:00Z") });
+            const after = await setupEvent(club.id, { start: new Date("2026-03-01T00:00:00Z") });
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            await setupCategory(before.id, "Venue", 1);
+            await setupCategory(onFrom.id, "Venue", 10);
+            await setupCategory(onTo.id, "Venue", 100);
+            await setupCategory(after.id, "Venue", 1000);
+
+            const res = await getCategories(app, cookie, "?from=2026-02-01T00:00:00.000Z&to=2026-02-28T00:00:00.000Z");
+            expect(res.status).toBe(200);
+            const body = await res.json() as CategorySpendingSummary;
+
+            expect(body.totalAllocated).toBe(110);
+            expect(body.categories[0]!.events.map((event) => event.eventId)).toEqual([onTo.id, onFrom.id]);
+        });
+
+        it.each([
+            ["a from date after the to date", "?from=2026-03-01&to=2026-02-01"],
+            ["an unparseable date", "?from=garbage"]
+        ])("rejects %s", async (_label, query) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+
+            const res = await getCategories(app, cookie, query);
+            expect(res.status).toBe(400);
         });
     });
 });
