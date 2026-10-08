@@ -1,15 +1,42 @@
-import { Empty, Layout, Progress, Result, Space, Table, Tag, Typography, theme, type TableProps } from "antd";
+import { DatePicker, Empty, Layout, Progress, Result, Segmented, Space, Table, Tag, Typography, theme, type TableProps } from "antd";
 import useSWR from "swr";
 import dayjs from "dayjs";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import type { EventSpending } from "@knot/backend/budget";
+import { formatCurrency } from "@/lib/categorySpending.ts";
+import { CategorySpendingSection, type DateRange } from "@/components/CategorySpendingSection.tsx";
 
 const { Title } = Typography;
+const { RangePicker } = DatePicker;
 
-const currency = (amount: number) => `$${amount.toFixed(2)}`;
+type BudgetView = "events" | "categories";
+const URL_DATE_FORMAT = "YYYY-MM-DD";
+
+// View and date range live in the URL so a filtered view can be shared or bookmarked.
+function useBudgetFilters() {
+    const [params, setParams] = useSearchParams();
+    const view: BudgetView = params.get("view") === "categories" ? "categories" : "events";
+    const from = params.get("from");
+    const to = params.get("to");
+    const range: DateRange = from && to && dayjs(from).isValid() && dayjs(to).isValid() ? { from, to } : null;
+
+    const update = (changes: Record<string, string | null>) => {
+        const next = new URLSearchParams(params);
+        Object.entries(changes).forEach(([key, value]) => value === null ? next.delete(key) : next.set(key, value));
+        setParams(next, { replace: true });
+    };
+
+    return {
+        view,
+        range,
+        setView: (value: BudgetView) => update({ view: value === "events" ? null : value }),
+        setRange: (value: DateRange) => update({ from: value?.from ?? null, to: value?.to ?? null })
+    };
+}
 
 export function BudgetOverviewPage() {
     const { token } = theme.useToken();
+    const { view, range, setView, setRange } = useBudgetFilters();
 
     return <Layout style={{ padding: "24px 24px" }}>
         <Layout
@@ -20,7 +47,30 @@ export function BudgetOverviewPage() {
             }}
         >
             <Title level={2} style={{ margin: 0, marginBottom: "24px" }}>Budget Overview</Title>
-            <SpendingByEvent />
+
+            <Space style={{ paddingBottom: 24 }} wrap>
+                <Segmented
+                    value={view}
+                    onChange={(value) => setView(value as BudgetView)}
+                    options={[
+                        { label: "By event", value: "events" },
+                        { label: "By category", value: "categories" }
+                    ]}
+                />
+                { view === "categories" &&
+                    <RangePicker
+                        aria-label="Event date range"
+                        allowEmpty={[false, false]}
+                        value={range ? [dayjs(range.from), dayjs(range.to)] : null}
+                        onChange={(dates) => setRange(dates?.[0] && dates[1]
+                            ? { from: dates[0].format(URL_DATE_FORMAT), to: dates[1].format(URL_DATE_FORMAT) }
+                            : null
+                        )}
+                    />
+                }
+            </Space>
+
+            { view === "categories" ? <CategorySpendingSection range={range} /> : <SpendingByEvent /> }
         </Layout>
     </Layout>
 }
@@ -52,13 +102,13 @@ function SpendingByEvent() {
             key: "allocated",
             title: "Allocated",
             sorter: (a, b) => a.totalAllocated - b.totalAllocated,
-            render: (_, event) => currency(event.totalAllocated)
+            render: (_, event) => formatCurrency(event.totalAllocated)
         },
         {
             key: "spent",
             title: "Spent",
             sorter: (a, b) => a.totalSpent - b.totalSpent,
-            render: (_, event) => currency(event.totalSpent)
+            render: (_, event) => formatCurrency(event.totalSpent)
         },
         {
             key: "progress",
