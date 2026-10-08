@@ -12,7 +12,8 @@ import {
     type ExpenseWithRelations,
     type MemberBudgetView
 } from "../types/budget.ts";
-import {clubsTable, eventsTable, budgetCategoriesTable, expensesTable, tasksTable} from "../db/schema.ts";
+import {CreateEventDocumentSchema} from "../types/event-documents.ts";
+import {clubsTable, eventsTable, budgetCategoriesTable, eventDocumentsTable, expensesTable, tasksTable} from "../db/schema.ts";
 import {and, count, eq, inArray, sql} from "drizzle-orm";
 import {describeZodError} from "../types/errors.ts";
 
@@ -359,6 +360,47 @@ eventsApp.post("/:id{[0-9]+}/expenses", async (c) => {
         .returning();
 
     return c.json(expense, 201);
+});
+
+eventsApp.get("/:id{[0-9]+}/documents", async (c) => {
+    const eventId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const user = c.var.user;
+
+    const event = await db.query.eventsTable.findFirst({
+        where: { id: eventId, clubId: user.club.id }
+    });
+    if (!event) throw new HTTPException(404, { message: "Event not found" });
+
+    const documents = await db.query.eventDocumentsTable.findMany({
+        where: { eventId },
+        with: { addedByUser: { columns: { id: true, name: true } } },
+        orderBy: { createdAt: "desc", id: "desc" }
+    });
+
+    return c.json(documents);
+});
+
+eventsApp.post("/:id{[0-9]+}/documents", async (c) => {
+    const eventId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const user = c.var.user;
+
+    const body = await c.req.json();
+    const parsed = CreateEventDocumentSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
+
+    const event = await db.query.eventsTable.findFirst({
+        where: { id: eventId, clubId: user.club.id }
+    });
+    if (!event) throw new HTTPException(404, { message: "Event not found" });
+
+    const [document] = await db
+        .insert(eventDocumentsTable)
+        .values({ eventId, title: parsed.data.title, url: parsed.data.url, addedBy: user.id })
+        .returning();
+
+    return c.json(document, 201);
 });
 
 export { eventsApp };
