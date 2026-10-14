@@ -1,4 +1,4 @@
-import type { budgetCategoriesTable, expensesTable } from "../db/schema.ts";
+import type { budgetCategoriesTable, expensesTable, incomeTable } from "../db/schema.ts";
 import { z } from "zod";
 
 export const BudgetCategoryInputSchema = z.object({
@@ -23,15 +23,32 @@ export const CreateExpenseSchema = z.object({
 
 export const UpdateExpenseSchema = CreateExpenseSchema;
 
+export const CreateIncomeSchema = z.object({
+    source: z.string().trim().min(1, "Source cannot be empty").max(255),
+    amount: z.number().positive(),
+    description: z.string().trim().max(500).optional()
+});
+
+export const UpdateIncomeSchema = CreateIncomeSchema;
+
 export type BudgetCategoryInput = z.infer<typeof BudgetCategoryInputSchema>;
 export type SetEventBudgetData = z.infer<typeof SetEventBudgetSchema>;
 export type CreateExpenseData = z.infer<typeof CreateExpenseSchema>;
 export type UpdateExpenseData = z.infer<typeof UpdateExpenseSchema>;
 
+export type CreateIncomeData = z.infer<typeof CreateIncomeSchema>;
+export type UpdateIncomeData = z.infer<typeof UpdateIncomeSchema>;
+
 export type BudgetCategory = typeof budgetCategoriesTable.$inferSelect;
 export type Expense = typeof expensesTable.$inferSelect;
 
 export type EventBudgetLine = BudgetCategory & { spent: number };
+
+export type Income = typeof incomeTable.$inferSelect;
+
+export type IncomeWithCreator = Income & {
+    creator: { id: number; name: string };
+};
 
 export type BudgetCategoryOption = Pick<BudgetCategory, "id" | "name">;
 
@@ -47,6 +64,8 @@ export type EventBudgetSummary = {
     expenses: ExpenseWithRelations[];
     totalAllocated: number;
     totalSpent: number;
+    income: IncomeWithCreator[];
+    totalIncome: number;
 };
 
 // Standard members only see category names (to log against) and their own expenses.
@@ -65,4 +84,5 @@ export type EventSpending = {
     archived: boolean;
     totalAllocated: number;
     totalSpent: number;
+    totalIncome: number;
 };

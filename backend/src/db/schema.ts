@@ -120,6 +120,16 @@ export const expensesTable = pgTable("expenses", {
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
 });
 
+export const incomeTable = pgTable("income", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    eventId: integer("event_id").notNull(),
+    source: varchar({ length: 255 }).notNull(),
+    amount: numeric({ precision: 10, scale: 2, mode: "number" }).notNull(),
+    description: varchar({ length: 500 }),
+    createdBy: integer("created_by").notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+});
+
 export const relations = defineRelations({
     clubsTable,
     usersTable,
@@ -131,7 +141,8 @@ export const relations = defineRelations({
     taskAuditLogTable,
     eventAttendanceTable,
     budgetCategoriesTable,
-    expensesTable
+    expensesTable,
+    incomeTable
 }, (r) => ({
     usersTable: {
         club: r.one.clubsTable({
@@ -146,7 +157,8 @@ export const relations = defineRelations({
         }),
         attendance: r.many.eventAttendanceTable(),
         budgetCategories: r.many.budgetCategoriesTable(),
-        expenses: r.many.expensesTable()
+        expenses: r.many.expensesTable(),
+        income: r.many.incomeTable()
     },
     clubsTable: {
         users: r.many.usersTable(),
@@ -237,6 +249,16 @@ export const relations = defineRelations({
         }),
         creator: r.one.usersTable({
             from: r.expensesTable.createdBy,
+            to: r.usersTable.id
+        })
+    },
+    incomeTable: {
+        event: r.one.eventsTable({
+            from: r.incomeTable.eventId,
+            to: r.eventsTable.id
+        }),
+        creator: r.one.usersTable({
+            from: r.incomeTable.createdBy,
             to: r.usersTable.id
         })
     }
