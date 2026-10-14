@@ -12,7 +12,7 @@ const ClubEventFields = z.object({
 });
 
 const startsBeforeEnd = {
-    check: (data: { start: Date; end: Date }) => data.start < data.end,
+    check: (data: { start?: Date; end?: Date }) => !data.start || !data.end || data.start < data.end,
     params: { message: "Event must start before it ends", path: ["end"] }
 };
 
