@@ -12,7 +12,17 @@ import {
     type ExpenseWithRelations,
     type MemberBudgetView
 } from "../types/budget.ts";
-import {clubsTable, eventsTable, budgetCategoriesTable, expensesTable, tasksTable} from "../db/schema.ts";
+import {
+    budgetCategoriesTable,
+    clubsTable,
+    eventAttendanceTable,
+    eventsTable,
+    expensesTable,
+    taskAssignmentsTable,
+    taskDependenciesTable,
+    taskDocumentsTable,
+    tasksTable
+} from "../db/schema.ts";
 import {and, count, eq, inArray, sql} from "drizzle-orm";
 import {describeZodError} from "../types/errors.ts";
 
@@ -127,6 +137,41 @@ eventsApp.put("/:id{[0-9]+}", async (c) => {
     if (!updatedEvent) throw new HTTPException(404, { message: "Event not found or unauthorized" });
 
     return c.json(updatedEvent);
+});
+
+// Permanently removes an event and everything that hangs off it. The task audit log is
+// insert-only, so its rows are deliberately left in place.
+eventsApp.delete("/:id{[0-9]+}", async (c) => {
+    const eventId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const user = c.var.user;
+
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can delete events" });
+
+    const event = await db.query.eventsTable.findFirst({
+        where: { id: eventId, clubId: user.club.id }
+    });
+    if (!event) throw new HTTPException(404, { message: "Event not found or unauthorized" });
+
+    await db.transaction(async (tx) => {
+        const taskIds = (await tx.select({ id: tasksTable.id }).from(tasksTable).where(eq(tasksTable.eventId, eventId)))
+            .map((task) => task.id);
+
+        if (taskIds.length > 0) {
+            await tx.delete(taskAssignmentsTable).where(inArray(taskAssignmentsTable.taskId, taskIds));
+            await tx.delete(taskDependenciesTable).where(inArray(taskDependenciesTable.taskId, taskIds));
+            await tx.delete(taskDependenciesTable).where(inArray(taskDependenciesTable.dependsOnTaskId, taskIds));
+            await tx.delete(taskDocumentsTable).where(inArray(taskDocumentsTable.taskId, taskIds));
+            await tx.delete(tasksTable).where(inArray(tasksTable.id, taskIds));
+        }
+
+        await tx.delete(expensesTable).where(eq(expensesTable.eventId, eventId));
+        await tx.delete(budgetCategoriesTable).where(eq(budgetCategoriesTable.eventId, eventId));
+        await tx.delete(eventAttendanceTable).where(eq(eventAttendanceTable.eventId, eventId));
+        await tx.delete(eventsTable).where(and(eq(eventsTable.id, eventId), eq(eventsTable.clubId, user.club.id)));
+    });
+
+    return c.json({ message: "Deleted" });
 });
 
 eventsApp.patch("/:id{[0-9]+}/archive", async (c) => {
