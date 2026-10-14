@@ -4,7 +4,7 @@ import type { DbEnv } from "../db/connection.ts";
 import { HTTPException } from "hono/http-exception";
 import { SetReimbursementSchema, UpdateExpenseSchema } from "../types/budget.ts";
 import { budgetCategoriesTable, expensesTable } from "../db/schema.ts";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 type Db = DbEnv["Variables"]["db"];
 
@@ -105,8 +105,12 @@ budgetApp.put("/expenses/:id{[0-9]+}", async (c) => {
                 ? { reimbursedAt: null, reimbursedBy: null }
                 : {})
         })
-        .where(eq(expensesTable.id, expenseId))
+        // Re-checked in the UPDATE itself so a reimbursement recorded since the read above can't be wiped
+        .where(isExecOrAdmin(user.role)
+            ? eq(expensesTable.id, expenseId)
+            : and(eq(expensesTable.id, expenseId), isNull(expensesTable.reimbursedAt)))
         .returning();
+    if (!expense) throw new HTTPException(409, { message: "Reimbursed expenses can only be changed by an exec" });
 
     return c.json(expense);
 });
