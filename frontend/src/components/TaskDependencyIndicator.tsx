@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Popover, Space, Tag, Typography, theme } from "antd";
 import { CheckCircleOutlined, ClockCircleOutlined, LockOutlined, PartitionOutlined } from "@ant-design/icons";
-import { summariseDependencies, type DependencySummaryInput, type LinkedTask } from "@/lib/taskDependencies.ts";
+import { countDependencies, summariseDependencies, type DependencySummaryInput, type LinkedTask } from "@/lib/taskDependencies.ts";
 import { pluralise } from "@/lib/pluralise.ts";
 
 const { Text } = Typography;
@@ -44,6 +44,18 @@ export function TaskDependencyIndicator(props: { task: DependencySummaryInput; f
             </LinkedTasksPopover>
         }
     </Space>
+}
+
+// Exact number of tasks this one depends on, e.g. "3 dependencies · 1 done".
+export function DependencyCount(props: { task: DependencySummaryInput }) {
+    const { total, completed } = countDependencies(props.task);
+
+    if (total === 0) return <Text type="secondary">None</Text>;
+
+    return <Text aria-label={`Depends on ${pluralise(total, "task")}, ${completed} done`}>
+        <Text strong>{total}</Text> {total === 1 ? "task" : "tasks"}
+        <Text type="secondary" style={{ fontSize: "12px" }}> · {completed} done</Text>
+    </Text>
 }
 
 // One tag per linked task, marked done or outstanding by icon as well as colour.

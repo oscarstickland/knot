@@ -22,7 +22,7 @@ import { UserOutlined } from "@ant-design/icons";
 import { priorityColor, progressColor, progressLabel } from "@/components/TaskStatusPill.tsx";
 import { useAppNotification } from "@/lib/useAppNotification";
 import { summariseDependencies } from "@/lib/taskDependencies.ts";
-import { LinkedTaskTags } from "@/components/TaskDependencyIndicator.tsx";
+import { DependencyCount, LinkedTaskTags } from "@/components/TaskDependencyIndicator.tsx";
 
 const { Text } = Typography;
 
@@ -110,6 +110,13 @@ export function TasksSection(props: { eventId: number }) {
                             <ProgressSelect task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
                         </div>
                     )
+                },
+                {
+                    key: "dependencyCount",
+                    title: "Dependencies",
+                    width: 130,
+                    responsive: ["md"],
+                    render: (_, task) => <DependencyCount task={task} />
                 },
                 {
                     key: "dependsOn",
