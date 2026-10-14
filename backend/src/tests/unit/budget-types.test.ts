@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { SetEventBudgetSchema } from "../../types/budget.ts";
+import { CategorySpendingQuerySchema, SetEventBudgetSchema } from "../../types/budget.ts";
 
 describe("SetEventBudgetSchema", () => {
     it("accepts a mix of new and existing categories", () => {
@@ -54,6 +54,34 @@ describe("SetEventBudgetSchema", () => {
         ["a fractional id", { id: 1.5, name: "Venue", allocatedAmount: 1 }]
     ])("rejects %s", (_label, category) => {
         const parsed = SetEventBudgetSchema.safeParse({ categories: [category] });
+        expect(parsed.success).toBe(false);
+    });
+});
+
+describe("CategorySpendingQuerySchema", () => {
+    it("accepts an empty query", () => {
+        const parsed = CategorySpendingQuerySchema.safeParse({});
+        expect(parsed.success).toBe(true);
+    });
+
+    it("coerces ISO strings into dates", () => {
+        const parsed = CategorySpendingQuerySchema.parse({ from: "2026-01-01T00:00:00.000Z", to: "2026-12-31T00:00:00.000Z" });
+        expect(parsed.from).toBeInstanceOf(Date);
+        expect(parsed.to?.toISOString()).toBe("2026-12-31T00:00:00.000Z");
+    });
+
+    it("accepts a range where from equals to", () => {
+        const parsed = CategorySpendingQuerySchema.safeParse({ from: "2026-01-01", to: "2026-01-01" });
+        expect(parsed.success).toBe(true);
+    });
+
+    it("rejects a range where from is after to", () => {
+        const parsed = CategorySpendingQuerySchema.safeParse({ from: "2026-02-01", to: "2026-01-01" });
+        expect(parsed.success).toBe(false);
+    });
+
+    it("rejects a date that cannot be parsed", () => {
+        const parsed = CategorySpendingQuerySchema.safeParse({ from: "not-a-date" });
         expect(parsed.success).toBe(false);
     });
 });

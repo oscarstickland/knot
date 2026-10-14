@@ -1,6 +1,16 @@
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect } from "bun:test";
 import { type TestDatabaseHarness, setupHarness } from "../harness.ts";
-import { eventsTable, tasksTable } from "../../db/schema.ts";
+import {
+    budgetCategoriesTable,
+    eventAttendanceTable,
+    eventsTable,
+    expensesTable,
+    taskAssignmentsTable,
+    taskAuditLogTable,
+    taskDependenciesTable,
+    taskDocumentsTable,
+    tasksTable
+} from "../../db/schema.ts";
 import type { ClubEventWithTaskProgress } from "../../types/events.ts";
 
 describe("Database Integration Test", () => {
@@ -703,5 +713,109 @@ describe("Database Integration Test", () => {
             headers: { cookie: user2.cookie },
         });
         expect(res.status).toBe(200);
+    });
+
+    describe("deleting events", () => {
+        const insertEvent = async (clubId: number) => {
+            const referenceDate = new Date();
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", location: "Main Hall", start: referenceDate, end: new Date(referenceDate.valueOf() + 5000), clubId })
+                .returning();
+            return event!;
+        };
+
+        it("prevents standard users from deleting events", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+            const event = await insertEvent(club.id);
+
+            const res = await app.request(`/api/events/${event.id}`, { method: "DELETE", headers: { cookie } });
+            expect(res.status).toBe(403);
+
+            const stillThere = await harness.db.query.eventsTable.findFirst({ where: { id: event.id } });
+            expect(stillThere).toBeDefined();
+        });
+
+        it.each(["admin", "exec"])("allows %s to delete an event", async (role) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+            const event = await insertEvent(club.id);
+
+            const res = await app.request(`/api/events/${event.id}`, { method: "DELETE", headers: { cookie } });
+            expect(res.status).toBe(200);
+
+            const gone = await harness.db.query.eventsTable.findFirst({ where: { id: event.id } });
+            expect(gone).toBeUndefined();
+        });
+
+        it("returns 404 for an event that does not exist", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "admin", club.id, "User");
+
+            const res = await app.request("/api/events/999999", { method: "DELETE", headers: { cookie } });
+            expect(res.status).toBe(404);
+        });
+
+        it("prevents deleting another club's event", async () => {
+            const app = await harness.setupApp();
+            const club1 = await harness.setupClub("Club 1");
+            const club2 = await harness.setupClub("Club 2");
+            const { cookie } = await harness.setupUser("test@test.com", "admin", club1.id, "User");
+            const event = await insertEvent(club2.id);
+
+            const res = await app.request(`/api/events/${event.id}`, { method: "DELETE", headers: { cookie } });
+            expect(res.status).toBe(404);
+
+            const stillThere = await harness.db.query.eventsTable.findFirst({ where: { id: event.id } });
+            expect(stillThere).toBeDefined();
+        });
+
+        it("removes the event's tasks, budget and attendance but leaves other events alone", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie, user } = await harness.setupUser("test@test.com", "admin", club.id, "User");
+            const event = await insertEvent(club.id);
+            const otherEvent = await insertEvent(club.id);
+
+            const [task, otherTask] = await harness.db
+                .insert(tasksTable)
+                .values([
+                    { eventId: event.id, title: "Task", description: "Desc", createdBy: user.id },
+                    { eventId: otherEvent.id, title: "Other", description: "Desc", createdBy: user.id }
+                ])
+                .returning();
+            await harness.db.insert(taskAssignmentsTable).values({ taskId: task!.id, userId: user.id });
+            await harness.db.insert(taskDependenciesTable).values({ taskId: otherTask!.id, dependsOnTaskId: task!.id });
+            await harness.db.insert(taskDocumentsTable).values({ taskId: task!.id, url: "https://example.com", addedBy: user.id });
+            await harness.db.insert(taskAuditLogTable).values({ taskId: task!.id, changedBy: user.id, action: "created", changes: {} });
+            const [category] = await harness.db
+                .insert(budgetCategoriesTable)
+                .values({ eventId: event.id, name: "Food", allocatedAmount: 100 })
+                .returning();
+            await harness.db.insert(expensesTable).values({ eventId: event.id, categoryId: category!.id, amount: 10, description: "Pizza", createdBy: user.id });
+            await harness.db.insert(eventAttendanceTable).values({ eventId: event.id, name: "Guest", email: "guest@test.com" });
+
+            const res = await app.request(`/api/events/${event.id}`, { method: "DELETE", headers: { cookie } });
+            expect(res.status).toBe(200);
+
+            expect(await harness.db.query.tasksTable.findMany({ where: { eventId: event.id } })).toHaveLength(0);
+            expect(await harness.db.query.taskAssignmentsTable.findMany({ where: { taskId: task!.id } })).toHaveLength(0);
+            expect(await harness.db.query.taskDependenciesTable.findMany({ where: { dependsOnTaskId: task!.id } })).toHaveLength(0);
+            expect(await harness.db.query.taskDocumentsTable.findMany({ where: { taskId: task!.id } })).toHaveLength(0);
+            expect(await harness.db.query.budgetCategoriesTable.findMany({ where: { eventId: event.id } })).toHaveLength(0);
+            expect(await harness.db.query.expensesTable.findMany({ where: { eventId: event.id } })).toHaveLength(0);
+            expect(await harness.db.query.eventAttendanceTable.findMany({ where: { eventId: event.id } })).toHaveLength(0);
+
+            // audit log is insert-only, so it survives
+            expect(await harness.db.query.taskAuditLogTable.findMany({ where: { taskId: task!.id } })).toHaveLength(1);
+
+            // the other event and its task are untouched
+            expect(await harness.db.query.eventsTable.findFirst({ where: { id: otherEvent.id } })).toBeDefined();
+            expect(await harness.db.query.tasksTable.findFirst({ where: { id: otherTask!.id } })).toBeDefined();
+        });
     });
 });
