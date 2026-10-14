@@ -983,6 +983,24 @@ describe("Budget Integration Test", () => {
             expect(after?.reimbursedAt).not.toBeNull();
         });
 
+        it("prevents a standard user from deleting an expense that was already reimbursed", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: member, cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const category = await setupCategory(event.id);
+            const expense = await setupPersonalExpense(event.id, category.id, member.id, 50, new Date());
+
+            const res = await app.request(`/api/budget/expenses/${expense.id}`, {
+                method: "DELETE",
+                headers: { cookie }
+            });
+            expect(res.status).toBe(409);
+
+            const after = await harness.db.query.expensesTable.findFirst({ where: { id: expense.id } });
+            expect(after).toBeDefined();
+        });
+
         it("keeps a recorded reimbursement when an exec only changes the description", async () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
