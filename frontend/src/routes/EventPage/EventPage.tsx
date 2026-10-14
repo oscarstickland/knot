@@ -132,7 +132,7 @@ function EventInformation(props: { id: string }) {
         {
             key: "documents",
             label: "Documents",
-            children: <DocumentsTab />
+            children: <DocumentsTab event={data} />
         }
     ]
 

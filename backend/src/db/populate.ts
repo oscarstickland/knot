@@ -4,6 +4,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import {
     budgetCategoriesTable,
     clubsTable,
+    eventDocumentsTable,
     eventsTable,
     expensesTable,
     relations,
@@ -200,6 +201,22 @@ async function generateData() {
             amount: 60,
             description: "Printed flyers",
             createdBy: insertedUser2!.id
+        }
+    ]);
+
+    console.log("-- Inserting Event Documents");
+    await db.insert(eventDocumentsTable).values([
+        {
+            eventId: insertedEvent1!.id,
+            title: "Run sheet",
+            url: "https://docs.google.com/document/d/example-run-sheet",
+            addedBy: insertedUser1!.id
+        },
+        {
+            eventId: insertedEvent1!.id,
+            title: "Volunteer roster",
+            url: "https://docs.google.com/spreadsheets/d/example-roster",
+            addedBy: insertedUser2!.id
         }
     ]);
 
