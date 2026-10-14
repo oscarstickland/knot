@@ -20,7 +20,8 @@ import { useUser } from "@/lib/auth.tsx";
 import { TaskDrawer } from "@/components/TaskDrawer.tsx";
 import dayjs from "dayjs";
 import { UserOutlined } from "@ant-design/icons";
-import { priorityColor, progressColor, progressLabel } from "@/components/TaskStatusPill.tsx";
+import { priorityColor, ProgressTag, progressLabel } from "@/components/TaskStatusPill.tsx";
+import { completedRowStyle, isTaskCompleted } from "@/lib/taskCompletion.ts";
 import { useAppNotification } from "@/lib/useAppNotification";
 
 const { Text } = Typography;
@@ -62,12 +63,13 @@ export function TasksSection(props: { eventId: number }) {
             locale={{ emptyText: <Empty description="No tasks yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
             onRow={(task) => ({
                 onClick: () => setOpenTaskId(task.id),
-                style: { cursor: "pointer" }
+                style: { cursor: "pointer", ...completedRowStyle(task, token).row }
             })}
             columns={[
                 {
                     key: "complete",
                     width: 36,
+                    onCell: (task) => ({ style: completedRowStyle(task, token).firstCell }),
                     render: (_, task) => (
                         <div onClick={(e) => e.stopPropagation()}>
                             <CompleteCheckbox task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
@@ -79,7 +81,7 @@ export function TasksSection(props: { eventId: number }) {
                     title: "Task",
                     dataIndex: "title",
                     render: (title, task) => <div>
-                        <Text strong delete={task.progress === "completed"}>{title}</Text>
+                        <Text strong delete={isTaskCompleted(task)} type={isTaskCompleted(task) ? "secondary" : undefined}>{title}</Text>
                         <br />
                         <Text type="secondary" style={{ fontSize: "12px" }}>{task.description}</Text>
                     </div>
@@ -200,7 +202,7 @@ function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTas
 
     if (!canEdit) return <>
         {contextHolder}
-        <Tag color={progressColor[props.task.progress]}>{progressLabel(props.task.progress)}</Tag>
+        <ProgressTag progress={props.task.progress} />
     </>
 
     return <>
