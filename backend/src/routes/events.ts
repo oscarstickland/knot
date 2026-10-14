@@ -12,7 +12,20 @@ import {
     type ExpenseWithRelations,
     type MemberBudgetView
 } from "../types/budget.ts";
-import {clubsTable, eventsTable, budgetCategoriesTable, expensesTable, tasksTable, taskDependenciesTable, taskAuditLogTable} from "../db/schema.ts";
+import {CreateEventDocumentSchema} from "../types/event-documents.ts";
+import {
+    budgetCategoriesTable,
+    clubsTable,
+    eventAttendanceTable,
+    eventDocumentsTable,
+    eventsTable,
+    expensesTable,
+    taskAssignmentsTable,
+    taskDependenciesTable,
+    taskAuditLogTable,
+    taskDocumentsTable,
+    tasksTable
+} from "../db/schema.ts";
 import {and, count, eq, inArray, sql} from "drizzle-orm";
 import {describeZodError} from "../types/errors.ts";
 
@@ -222,6 +235,41 @@ eventsApp.put("/:id{[0-9]+}", async (c) => {
     if (!updatedEvent) throw new HTTPException(404, { message: "Event not found or unauthorized" });
 
     return c.json(updatedEvent);
+});
+
+// Permanently removes an event and everything that hangs off it. The task audit log is
+// insert-only, so its rows are deliberately left in place.
+eventsApp.delete("/:id{[0-9]+}", async (c) => {
+    const eventId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const user = c.var.user;
+
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can delete events" });
+
+    const event = await db.query.eventsTable.findFirst({
+        where: { id: eventId, clubId: user.club.id }
+    });
+    if (!event) throw new HTTPException(404, { message: "Event not found or unauthorized" });
+
+    await db.transaction(async (tx) => {
+        const taskIds = (await tx.select({ id: tasksTable.id }).from(tasksTable).where(eq(tasksTable.eventId, eventId)))
+            .map((task) => task.id);
+
+        if (taskIds.length > 0) {
+            await tx.delete(taskAssignmentsTable).where(inArray(taskAssignmentsTable.taskId, taskIds));
+            await tx.delete(taskDependenciesTable).where(inArray(taskDependenciesTable.taskId, taskIds));
+            await tx.delete(taskDependenciesTable).where(inArray(taskDependenciesTable.dependsOnTaskId, taskIds));
+            await tx.delete(taskDocumentsTable).where(inArray(taskDocumentsTable.taskId, taskIds));
+            await tx.delete(tasksTable).where(inArray(tasksTable.id, taskIds));
+        }
+
+        await tx.delete(expensesTable).where(eq(expensesTable.eventId, eventId));
+        await tx.delete(budgetCategoriesTable).where(eq(budgetCategoriesTable.eventId, eventId));
+        await tx.delete(eventAttendanceTable).where(eq(eventAttendanceTable.eventId, eventId));
+        await tx.delete(eventsTable).where(and(eq(eventsTable.id, eventId), eq(eventsTable.clubId, user.club.id)));
+    });
+
+    return c.json({ message: "Deleted" });
 });
 
 eventsApp.patch("/:id{[0-9]+}/archive", async (c) => {
@@ -454,6 +502,47 @@ eventsApp.post("/:id{[0-9]+}/expenses", async (c) => {
         .returning();
 
     return c.json(expense, 201);
+});
+
+eventsApp.get("/:id{[0-9]+}/documents", async (c) => {
+    const eventId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const user = c.var.user;
+
+    const event = await db.query.eventsTable.findFirst({
+        where: { id: eventId, clubId: user.club.id }
+    });
+    if (!event) throw new HTTPException(404, { message: "Event not found" });
+
+    const documents = await db.query.eventDocumentsTable.findMany({
+        where: { eventId },
+        with: { addedByUser: { columns: { id: true, name: true } } },
+        orderBy: { createdAt: "desc", id: "desc" }
+    });
+
+    return c.json(documents);
+});
+
+eventsApp.post("/:id{[0-9]+}/documents", async (c) => {
+    const eventId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const user = c.var.user;
+
+    const body = await c.req.json();
+    const parsed = CreateEventDocumentSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
+
+    const event = await db.query.eventsTable.findFirst({
+        where: { id: eventId, clubId: user.club.id }
+    });
+    if (!event) throw new HTTPException(404, { message: "Event not found" });
+
+    const [document] = await db
+        .insert(eventDocumentsTable)
+        .values({ eventId, title: parsed.data.title, url: parsed.data.url, addedBy: user.id })
+        .returning();
+
+    return c.json(document, 201);
 });
 
 export { eventsApp };

@@ -1,6 +1,6 @@
-import {Button, Layout, Result, Space, Spin, Tag, theme, Typography, notification, type TabsProps, Tabs} from "antd";
+import {Button, Layout, Popconfirm, Result, Space, Spin, Tag, theme, Typography, notification, type TabsProps, Tabs} from "antd";
 import {useState} from "react";
-import {useParams} from "react-router";
+import {useNavigate, useParams} from "react-router";
 import useSWR, {mutate} from "swr";
 import {type ClubEvent, UpdateEventSchema} from "@knot/backend/events";
 import dayjs from "dayjs";
@@ -10,7 +10,7 @@ import {TasksSection} from "@/components/TasksSection.tsx";
 import {AxiosInstance} from "@/lib/fetcher.tsx";
 import type {AxiosError} from "axios";
 import {useUser} from "@/lib/auth.tsx";
-import {InboxOutlined, LockOutlined, UnlockOutlined} from "@ant-design/icons";
+import {DeleteOutlined, InboxOutlined, LockOutlined, UnlockOutlined} from "@ant-design/icons";
 import { OverviewTab } from "./OverviewTab";
 import { TasksTab } from "./TasksTab";
 import { BudgetTab } from "./BudgetTab";
@@ -44,6 +44,7 @@ function EventInformation(props: { id: string }) {
     const { token } = theme.useToken();
     const user = useUser();
     const [api, contextHolder] = useAppNotification();
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("overview");
     const { data, error, isLoading } = useSWR<ClubEvent, AxiosError>(props.id ? `/events/${props.id}` : null);
 
@@ -75,6 +76,18 @@ function EventInformation(props: { id: string }) {
             .catch((err) => {
                 const message = err?.response?.data?.message
                     ?? `Event could not be ${data.archived ? "unarchived" : "archived"}.`;
+                api["error"]({ title: "Error", description: message });
+            });
+    }
+
+    const deleteEvent = () => {
+        return AxiosInstance.delete(`/events/${data.id}`)
+            .then(async () => {
+                await mutate((key) => typeof key === "string" && key.startsWith("/events"));
+                navigate("/app/events");
+            })
+            .catch((err) => {
+                const message = err?.response?.data?.message ?? "Event could not be deleted.";
                 api["error"]({ title: "Error", description: message });
             });
     }
@@ -119,7 +132,7 @@ function EventInformation(props: { id: string }) {
         {
             key: "documents",
             label: "Documents",
-            children: <DocumentsTab />
+            children: <DocumentsTab event={data} />
         }
     ]
 
@@ -161,6 +174,15 @@ function EventInformation(props: { id: string }) {
                     </Button>
                     <EventModal key={`${data.name}-${data.start}-${data.end}`} event={data} mode={"duplicate"} />
                     <EventModal event={data} mode={"update"} />
+                    <Popconfirm
+                        title="Delete event"
+                        description="This permanently deletes the event along with its tasks, budget and attendance. This can't be undone. Archive it instead if you only want it hidden."
+                        onConfirm={deleteEvent}
+                        okText="Delete"
+                        okButtonProps={{ danger: true }}
+                    >
+                        <Button danger icon={<DeleteOutlined />}>Delete</Button>
+                    </Popconfirm>
                 </Space>
                 : ""
             }
