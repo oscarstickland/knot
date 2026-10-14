@@ -363,7 +363,10 @@ async function loadEventBudget(db: Db, eventId: number): Promise<EventBudgetSumm
         })),
         expenses: expenses.map(toExpenseWithRelations),
         totalAllocated: categories.reduce((sum, category) => sum + category.allocatedAmount, 0),
-        totalSpent: expenses.reduce((sum, expense) => sum + expense.amount, 0)
+        totalSpent: expenses.reduce((sum, expense) => sum + expense.amount, 0),
+        totalOwed: expenses
+            .filter((expense) => expense.paidPersonally && !expense.reimbursedAt)
+            .reduce((sum, expense) => sum + expense.amount, 0)
     };
 }
 
@@ -497,6 +500,7 @@ eventsApp.post("/:id{[0-9]+}/expenses", async (c) => {
             categoryId: parsed.data.categoryId,
             amount: parsed.data.amount,
             description: parsed.data.description,
+            paidPersonally: parsed.data.paidPersonally,
             createdBy: user.id
         })
         .returning();

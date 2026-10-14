@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { CategorySpendingQuerySchema, SetEventBudgetSchema } from "../../types/budget.ts";
+import { CategorySpendingQuerySchema, CreateExpenseSchema, SetEventBudgetSchema, SetReimbursementSchema } from "../../types/budget.ts";
 
 describe("SetEventBudgetSchema", () => {
     it("accepts a mix of new and existing categories", () => {
@@ -55,6 +55,32 @@ describe("SetEventBudgetSchema", () => {
     ])("rejects %s", (_label, category) => {
         const parsed = SetEventBudgetSchema.safeParse({ categories: [category] });
         expect(parsed.success).toBe(false);
+    });
+});
+
+describe("CreateExpenseSchema", () => {
+    const base = { categoryId: 1, amount: 10, description: "Snacks" };
+
+    it("defaults paidPersonally to false", () => {
+        expect(CreateExpenseSchema.parse(base).paidPersonally).toBe(false);
+    });
+
+    it("accepts paidPersonally true", () => {
+        expect(CreateExpenseSchema.parse({ ...base, paidPersonally: true }).paidPersonally).toBe(true);
+    });
+
+    it("rejects a non-boolean paidPersonally", () => {
+        expect(CreateExpenseSchema.safeParse({ ...base, paidPersonally: "yes" }).success).toBe(false);
+    });
+});
+
+describe("SetReimbursementSchema", () => {
+    it("accepts a boolean", () => {
+        expect(SetReimbursementSchema.safeParse({ reimbursed: true }).success).toBe(true);
+    });
+
+    it("rejects a missing flag", () => {
+        expect(SetReimbursementSchema.safeParse({}).success).toBe(false);
     });
 });
 

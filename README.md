@@ -32,5 +32,5 @@ In seperate terminals, run
 bun run dev:backend
 bun run dev:frontend
 ```
-Or, if you have mprocs, simply run `mprocs`
+Or, if you have dekit (previously mprocs), simply run `dekit mprocs`
 

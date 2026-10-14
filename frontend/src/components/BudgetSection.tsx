@@ -5,6 +5,7 @@ import type { EventBudgetLine, EventBudgetView, ExpenseWithRelations } from "@kn
 import { useUser } from "@/lib/auth.tsx";
 import { EventBudgetModal } from "@/components/EventBudgetModal.tsx";
 import { ExpenseModal } from "@/components/ExpenseModal.tsx";
+import { ReimbursementControl } from "@/components/ReimbursementControl.tsx";
 
 const { Text } = Typography;
 
@@ -26,6 +27,7 @@ export function BudgetSection(props: { eventId: number }) {
     const expenses = data?.expenses ?? [];
     const totalAllocated = summary?.totalAllocated ?? 0;
     const totalSpent = summary?.totalSpent ?? 0;
+    const totalOwed = summary?.totalOwed ?? 0;
     const remaining = totalAllocated - totalSpent;
 
     const categoryColumns: TableProps<EventBudgetLine>['columns'] = [
@@ -85,6 +87,13 @@ export function BudgetSection(props: { eventId: number }) {
             render: (_: unknown, expense: ExpenseWithRelations) => expense.creator.name
         }] : []),
         {
+            key: "reimbursement",
+            title: "Reimbursement",
+            render: (_, expense) => (
+                <ReimbursementControl eventId={props.eventId} expense={expense} canManage={isBudgetManager} />
+            )
+        },
+        {
             key: "actions",
             title: "",
             render: (_, expense) => (
@@ -116,6 +125,13 @@ export function BudgetSection(props: { eventId: number }) {
         <Space size="large" style={{ marginBottom: "24px" }}>
             <Statistic title="Total Allocated" value={totalAllocated} precision={2} prefix="$" />
             <Statistic title="Total Spent" value={totalSpent} precision={2} prefix="$" />
+            <Statistic
+                title="Owed to Members"
+                value={totalOwed}
+                precision={2}
+                prefix="$"
+                valueStyle={{ color: totalOwed > 0 ? token.colorWarning : undefined }}
+            />
             <Statistic
                 title="Remaining"
                 value={remaining}
