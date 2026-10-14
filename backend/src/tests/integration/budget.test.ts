@@ -369,7 +369,7 @@ describe("Budget Integration Test", () => {
             expect(res.status).toBe(200);
             const body = await res.json() as EventBudgetSummary;
 
-            expect(body).toEqual({ scope: "full", categories: [], expenses: [], totalAllocated: 0, totalSpent: 0 });
+            expect(body).toEqual({ scope: "full", categories: [], expenses: [], totalAllocated: 0, totalSpent: 0, income: [], totalIncome: 0 });
         });
 
         it("only exposes the id and name of an expense's creator", async () => {

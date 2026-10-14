@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { SetEventBudgetSchema } from "../../types/budget.ts";
+import { CreateIncomeSchema, SetEventBudgetSchema } from "../../types/budget.ts";
 
 describe("SetEventBudgetSchema", () => {
     it("accepts a mix of new and existing categories", () => {
@@ -55,5 +55,25 @@ describe("SetEventBudgetSchema", () => {
     ])("rejects %s", (_label, category) => {
         const parsed = SetEventBudgetSchema.safeParse({ categories: [category] });
         expect(parsed.success).toBe(false);
+    });
+});
+
+describe("CreateIncomeSchema", () => {
+    it("accepts a source and amount without a description", () => {
+        expect(CreateIncomeSchema.safeParse({ source: "Sponsor", amount: 10 }).success).toBe(true);
+    });
+
+    it("trims the source", () => {
+        expect(CreateIncomeSchema.parse({ source: "  Sponsor ", amount: 10 }).source).toBe("Sponsor");
+    });
+
+    it.each([
+        ["a blank source", { source: "  ", amount: 1 }],
+        ["a source over 255 characters", { source: "a".repeat(256), amount: 1 }],
+        ["a zero amount", { source: "Sponsor", amount: 0 }],
+        ["a negative amount", { source: "Sponsor", amount: -1 }],
+        ["a description over 500 characters", { source: "Sponsor", amount: 1, description: "a".repeat(501) }]
+    ])("rejects %s", (_label, payload) => {
+        expect(CreateIncomeSchema.safeParse(payload).success).toBe(false);
     });
 });
