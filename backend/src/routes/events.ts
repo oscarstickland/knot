@@ -7,12 +7,14 @@ import {HTTPException} from "hono/http-exception";
 import {ArchiveEventSchema, type ClubEventWithTaskProgress, SetAttendanceOpenSchema, UpdateEventSchema} from "../types/events.ts";
 import {
     CreateExpenseSchema,
+    CreateIncomeSchema,
     SetEventBudgetSchema,
     type EventBudgetSummary,
     type ExpenseWithRelations,
+    type IncomeWithCreator,
     type MemberBudgetView
 } from "../types/budget.ts";
-import {clubsTable, eventsTable, budgetCategoriesTable, expensesTable, tasksTable} from "../db/schema.ts";
+import {clubsTable, eventsTable, budgetCategoriesTable, expensesTable, incomeTable, tasksTable} from "../db/schema.ts";
 import {and, count, eq, inArray, sql} from "drizzle-orm";
 import {describeZodError} from "../types/errors.ts";
 
@@ -198,13 +200,26 @@ function toExpenseWithRelations(expense: ExpenseRow): ExpenseWithRelations {
     };
 }
 
+async function loadIncome(db: Db, eventId: number): Promise<IncomeWithCreator[]> {
+    const rows = await db.query.incomeTable.findMany({
+        where: { eventId },
+        with: { creator: true },
+        orderBy: { id: "asc" }
+    });
+    return rows.map(({ creator, ...rest }) => ({
+        ...rest,
+        creator: { id: creator!.id, name: creator!.name }
+    }));
+}
+
 async function loadEventBudget(db: Db, eventId: number): Promise<EventBudgetSummary> {
-    const [categories, expenses] = await Promise.all([
+    const [categories, expenses, income] = await Promise.all([
         db.query.budgetCategoriesTable.findMany({
             where: { eventId },
             orderBy: { id: "asc" }
         }),
-        loadExpenses(db, eventId)
+        loadExpenses(db, eventId),
+        loadIncome(db, eventId)
     ]);
 
     const spentByCategory = new Map<number, number>();
@@ -220,7 +235,9 @@ async function loadEventBudget(db: Db, eventId: number): Promise<EventBudgetSumm
         })),
         expenses: expenses.map(toExpenseWithRelations),
         totalAllocated: categories.reduce((sum, category) => sum + category.allocatedAmount, 0),
-        totalSpent: expenses.reduce((sum, expense) => sum + expense.amount, 0)
+        totalSpent: expenses.reduce((sum, expense) => sum + expense.amount, 0),
+        income,
+        totalIncome: income.reduce((sum, entry) => sum + entry.amount, 0)
     };
 }
 
@@ -359,6 +376,36 @@ eventsApp.post("/:id{[0-9]+}/expenses", async (c) => {
         .returning();
 
     return c.json(expense, 201);
+});
+
+// Only execs and admins handle money coming in; standard members never see or add income.
+eventsApp.post("/:id{[0-9]+}/income", async (c) => {
+    const eventId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const user = c.var.user;
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
+
+    const body = await c.req.json();
+    const parsed = CreateIncomeSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
+
+    const event = await db.query.eventsTable.findFirst({
+        where: { id: eventId, clubId: user.club.id }
+    });
+    if (!event) throw new HTTPException(404, { message: "Event not found" });
+
+    const [income] = await db
+        .insert(incomeTable)
+        .values({
+            eventId,
+            source: parsed.data.source,
+            amount: parsed.data.amount,
+            description: parsed.data.description || null,
+            createdBy: user.id
+        })
+        .returning();
+
+    return c.json(income, 201);
 });
 
 export { eventsApp };
