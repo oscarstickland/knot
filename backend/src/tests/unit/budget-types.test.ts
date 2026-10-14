@@ -81,6 +81,7 @@ describe("SetReimbursementSchema", () => {
 
     it("rejects a missing flag", () => {
         expect(SetReimbursementSchema.safeParse({}).success).toBe(false);
+    });
 });
 
 describe("CategorySpendingQuerySchema", () => {
