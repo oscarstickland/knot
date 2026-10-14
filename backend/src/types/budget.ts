@@ -23,10 +23,20 @@ export const CreateExpenseSchema = z.object({
 
 export const UpdateExpenseSchema = CreateExpenseSchema;
 
+// Optional date range (on event start) for the club-wide category dashboard.
+export const CategorySpendingQuerySchema = z.object({
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional()
+}).refine(
+    (query) => !query.from || !query.to || query.from <= query.to,
+    { message: "'from' must be on or before 'to'", path: ["to"] }
+);
+
 export type BudgetCategoryInput = z.infer<typeof BudgetCategoryInputSchema>;
 export type SetEventBudgetData = z.infer<typeof SetEventBudgetSchema>;
 export type CreateExpenseData = z.infer<typeof CreateExpenseSchema>;
 export type UpdateExpenseData = z.infer<typeof UpdateExpenseSchema>;
+export type CategorySpendingQuery = z.infer<typeof CategorySpendingQuerySchema>;
 
 export type BudgetCategory = typeof budgetCategoriesTable.$inferSelect;
 export type Expense = typeof expensesTable.$inferSelect;
@@ -63,6 +73,30 @@ export type EventSpending = {
     name: string;
     start: string;
     archived: boolean;
+    totalAllocated: number;
+    totalSpent: number;
+};
+
+export type CategorySpendingEvent = {
+    eventId: number;
+    name: string;
+    start: string;
+    allocated: number;
+    spent: number;
+};
+
+// Categories are per-event, so a club-wide category is every category sharing a name
+// (case and surrounding whitespace ignored) across the club's events.
+export type CategorySpending = {
+    key: string;
+    name: string;
+    totalAllocated: number;
+    totalSpent: number;
+    events: CategorySpendingEvent[];
+};
+
+export type CategorySpendingSummary = {
+    categories: CategorySpending[];
     totalAllocated: number;
     totalSpent: number;
 };
