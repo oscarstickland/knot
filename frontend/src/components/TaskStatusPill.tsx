@@ -1,5 +1,6 @@
 import type { Task } from "@knot/backend/tasks";
 import { Tag } from "antd";
+import { CheckCircleFilled } from "@ant-design/icons";
 
 export const progressLabel = (progress: string) =>
     progress.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
@@ -18,5 +19,14 @@ export const priorityColor: Record<string, string> = {
 };
 
 export function TaskStatusPill(props: { task: Task }) {
-    return <Tag color={progressColor[props.task.progress]}>{progressLabel(props.task.progress)}</Tag>
+    return <ProgressTag progress={props.task.progress} />
+}
+
+export function ProgressTag(props: { progress: string }) {
+    return <Tag
+        color={progressColor[props.progress]}
+        icon={props.progress === "completed" ? <CheckCircleFilled /> : undefined}
+    >
+        {progressLabel(props.progress)}
+    </Tag>
 }
