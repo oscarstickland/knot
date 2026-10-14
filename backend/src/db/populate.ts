@@ -192,14 +192,18 @@ async function generateData() {
             categoryId: cateringCategory!.id,
             amount: 320,
             description: "Catering for open day",
-            createdBy: insertedUser2!.id
+            createdBy: insertedUser2!.id,
+            paidPersonally: true
         },
         {
             eventId: insertedEvent1!.id,
             categoryId: marketingCategory!.id,
             amount: 60,
             description: "Printed flyers",
-            createdBy: insertedUser2!.id
+            createdBy: insertedUser2!.id,
+            paidPersonally: true,
+            reimbursedAt: new Date(),
+            reimbursedBy: insertedUser1!.id
         }
     ]);
 

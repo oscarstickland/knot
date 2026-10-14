@@ -118,6 +118,10 @@ export const expensesTable = pgTable("expenses", {
     description: varchar({ length: 500 }).notNull(),
     createdBy: integer("created_by").notNull(),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+    // Set when the creator paid out of pocket and is owed money back by the club.
+    paidPersonally: boolean("paid_personally").default(false).notNull(),
+    reimbursedAt: timestamp("reimbursed_at", { mode: "date", withTimezone: true }),
+    reimbursedBy: integer("reimbursed_by"),
 });
 
 export const relations = defineRelations({
