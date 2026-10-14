@@ -193,7 +193,14 @@ budgetApp.delete("/expenses/:id{[0-9]+}", async (c) => {
         throw new HTTPException(409, { message: "Reimbursed expenses can only be deleted by an exec" });
     }
 
-    await db.delete(expensesTable).where(eq(expensesTable.id, expenseId));
+    // Re-checked in the DELETE itself so a reimbursement recorded since the read above can't be erased
+    const deleted = await db
+        .delete(expensesTable)
+        .where(isExecOrAdmin(user.role)
+            ? eq(expensesTable.id, expenseId)
+            : and(eq(expensesTable.id, expenseId), isNull(expensesTable.reimbursedAt)))
+        .returning({ id: expensesTable.id });
+    if (deleted.length === 0) throw new HTTPException(409, { message: "Reimbursed expenses can only be deleted by an exec" });
 
     return c.json({ message: "Deleted" });
 });
