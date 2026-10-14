@@ -17,7 +17,7 @@ import { z } from "zod";
 import { useAppNotification } from "@/lib/useAppNotification";
 import { priorityColor, TaskStatusPill } from "@/components/TaskStatusPill.tsx";
 import { buildDependencyOptions, summariseDependencies } from "@/lib/taskDependencies.ts";
-import { LinkedTaskTags, TaskDependencyIndicator } from "@/components/TaskDependencyIndicator.tsx";
+import { DependencyCount, LinkedTaskTags, TaskDependencyIndicator } from "@/components/TaskDependencyIndicator.tsx";
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -287,6 +287,7 @@ function TaskSummary(props: { task: TaskWithRelations }) {
         <div>
             <Text type="secondary" style={{ fontSize: "12px" }}>Depends On</Text>
             <div style={{ marginTop: "4px" }}>
+                <div style={{ marginBottom: "4px" }}><DependencyCount task={task} /></div>
                 <LinkedTaskTags tasks={dependencies.prerequisites} emptyText="No dependencies" />
             </div>
         </div>
