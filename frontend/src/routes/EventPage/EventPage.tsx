@@ -172,6 +172,7 @@ function EventInformation(props: { id: string }) {
                     <Button icon={<InboxOutlined />} onClick={toggleArchived}>
                         {data.archived ? "Unarchive" : "Archive"}
                     </Button>
+                    <EventModal key={`${data.name}-${data.start}-${data.end}`} event={data} mode={"duplicate"} />
                     <EventModal event={data} mode={"update"} />
                     <Popconfirm
                         title="Delete event"

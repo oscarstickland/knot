@@ -4,7 +4,7 @@ import type {DbEnv} from "../db/connection.ts";
 import {zValidator} from "@hono/zod-validator";
 import { z } from 'zod';
 import {HTTPException} from "hono/http-exception";
-import {ArchiveEventSchema, type ClubEventWithTaskProgress, SetAttendanceOpenSchema, UpdateEventSchema} from "../types/events.ts";
+import {ArchiveEventSchema, DuplicateEventSchema, type ClubEventWithTaskProgress, SetAttendanceOpenSchema, UpdateEventSchema} from "../types/events.ts";
 import {
     CreateExpenseSchema,
     SetEventBudgetSchema,
@@ -22,6 +22,7 @@ import {
     expensesTable,
     taskAssignmentsTable,
     taskDependenciesTable,
+    taskAuditLogTable,
     taskDocumentsTable,
     tasksTable
 } from "../db/schema.ts";
@@ -95,6 +96,101 @@ eventsApp.post("/", async (c) => {
         .values({...parsed.data, clubId: user.club.id});
     return c.json({ message: "Created" }, 201)
 })
+
+// Clones an existing event (archived events work as templates). Tasks come across reset to
+// backlog with due dates shifted by the same offset as the event, and without assignees or
+// documents. Budget categories come across with their allocations but without expenses.
+eventsApp.post("/:id{[0-9]+}/duplicate", async (c) => {
+    const sourceId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const user = c.var.user;
+
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can duplicate events" });
+
+    const body = await c.req.json();
+    const parsed = DuplicateEventSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
+    const { includeTasks, includeBudget, ...details } = parsed.data;
+
+    const source = await db.query.eventsTable.findFirst({
+        where: { id: sourceId, clubId: user.club.id }
+    });
+    if (!source) throw new HTTPException(404, { message: "Event not found" });
+
+    const shiftMs = details.start.getTime() - source.start.getTime();
+
+    const created = await db.transaction(async (tx) => {
+        const [newEvent] = await tx
+            .insert(eventsTable)
+            .values({ ...details, clubId: user.club.id })
+            .returning();
+        if (!newEvent) throw new HTTPException(500, { message: "Failed to create event" });
+
+        if (includeBudget) {
+            const categories = await tx.query.budgetCategoriesTable.findMany({
+                where: { eventId: sourceId },
+                orderBy: { id: "asc" }
+            });
+            if (categories.length > 0) {
+                await tx.insert(budgetCategoriesTable).values(
+                    categories.map((category) => ({
+                        eventId: newEvent.id,
+                        name: category.name,
+                        allocatedAmount: category.allocatedAmount
+                    }))
+                );
+            }
+        }
+
+        if (includeTasks) {
+            const sourceTasks = await tx.query.tasksTable.findMany({
+                where: { eventId: sourceId },
+                orderBy: { id: "asc" }
+            });
+            const newIdBySourceId = new Map<number, number>();
+
+            for (const task of sourceTasks) {
+                const [copy] = await tx
+                    .insert(tasksTable)
+                    .values({
+                        eventId: newEvent.id,
+                        title: task.title,
+                        description: task.description,
+                        priority: task.priority,
+                        dueDate: task.dueDate ? new Date(task.dueDate.getTime() + shiftMs) : null,
+                        createdBy: user.id
+                    })
+                    .returning();
+                if (!copy) throw new HTTPException(500, { message: "Failed to duplicate tasks" });
+                newIdBySourceId.set(task.id, copy.id);
+
+                await tx.insert(taskAuditLogTable).values({
+                    taskId: copy.id,
+                    changedBy: user.id,
+                    action: "created",
+                    changes: { duplicatedFromTaskId: task.id, duplicatedFromEventId: sourceId }
+                });
+            }
+
+            const sourceDependencies = sourceTasks.length === 0 ? [] : await tx
+                .select()
+                .from(taskDependenciesTable)
+                .where(inArray(taskDependenciesTable.taskId, sourceTasks.map((task) => task.id)));
+            const dependencies = sourceDependencies.flatMap((dependency) => {
+                const taskId = newIdBySourceId.get(dependency.taskId);
+                const dependsOnTaskId = newIdBySourceId.get(dependency.dependsOnTaskId);
+                return taskId && dependsOnTaskId ? [{ taskId, dependsOnTaskId }] : [];
+            });
+            if (dependencies.length > 0) {
+                await tx.insert(taskDependenciesTable).values(dependencies);
+            }
+        }
+
+        return newEvent;
+    });
+
+    return c.json(created, 201);
+});
 
 eventsApp.get("/:id{[0-9]+}", async (c) => {
     const eventId = Number(c.req.param("id"));
