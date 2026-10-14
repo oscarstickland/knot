@@ -3,10 +3,10 @@ import useSWR from "swr";
 import dayjs from "dayjs";
 import { Link } from "react-router";
 import type { EventSpending } from "@knot/backend/budget";
+import { formatCurrency as currency } from "@/lib/currency.ts";
 
 const { Title } = Typography;
 
-const currency = (amount: number) => `$${amount.toFixed(2)}`;
 
 export function BudgetOverviewPage() {
     const { token } = theme.useToken();
@@ -59,6 +59,12 @@ function SpendingByEvent() {
             title: "Spent",
             sorter: (a, b) => a.totalSpent - b.totalSpent,
             render: (_, event) => currency(event.totalSpent)
+        },
+        {
+            key: "income",
+            title: "Income",
+            sorter: (a, b) => a.totalIncome - b.totalIncome,
+            render: (_, event) => currency(event.totalIncome)
         },
         {
             key: "progress",
