@@ -927,7 +927,8 @@ describe("Budget Integration Test", () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const event = await setupEvent(club.id);
-            const { user: member, cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const { cookie } = await harness.setupUser("exec@test.com", "exec", club.id, "Exec");
+            const { user: member } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
             const category = await setupCategory(event.id);
             const expense = await setupPersonalExpense(event.id, category.id, member.id, 50, new Date());
 
@@ -946,7 +947,8 @@ describe("Budget Integration Test", () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const event = await setupEvent(club.id);
-            const { user: member, cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const { cookie } = await harness.setupUser("exec@test.com", "exec", club.id, "Exec");
+            const { user: member } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
             const category = await setupCategory(event.id);
             const expense = await setupPersonalExpense(event.id, category.id, member.id, 50, new Date());
 
@@ -961,11 +963,32 @@ describe("Budget Integration Test", () => {
             expect(after?.reimbursedAt).toBeNull();
         });
 
-        it("keeps a recorded reimbursement when only the description changes", async () => {
+        it("prevents a standard user from editing an expense that was already reimbursed", async () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const event = await setupEvent(club.id);
             const { user: member, cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const category = await setupCategory(event.id);
+            const expense = await setupPersonalExpense(event.id, category.id, member.id, 50, new Date());
+
+            const res = await app.request(`/api/budget/expenses/${expense.id}`, {
+                method: "PUT",
+                headers: { cookie },
+                body: JSON.stringify({ categoryId: category.id, amount: 50, description: "Personal", paidPersonally: false })
+            });
+            expect(res.status).toBe(409);
+
+            const after = await harness.db.query.expensesTable.findFirst({ where: { id: expense.id } });
+            expect(after?.paidPersonally).toBe(true);
+            expect(after?.reimbursedAt).not.toBeNull();
+        });
+
+        it("keeps a recorded reimbursement when an exec only changes the description", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { cookie } = await harness.setupUser("exec@test.com", "exec", club.id, "Exec");
+            const { user: member } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
             const category = await setupCategory(event.id);
             const expense = await setupPersonalExpense(event.id, category.id, member.id, 50, new Date());
 

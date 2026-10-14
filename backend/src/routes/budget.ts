@@ -83,6 +83,10 @@ budgetApp.put("/expenses/:id{[0-9]+}", async (c) => {
 
     const existingExpense = await loadManageableExpense(db, expenseId, user);
     if (!existingExpense) throw new HTTPException(404, { message: "Expense not found" });
+    // Stops a member un-flagging and re-flagging a reimbursed expense to get paid twice
+    if (existingExpense.reimbursedAt && !isExecOrAdmin(user.role)) {
+        throw new HTTPException(409, { message: "Reimbursed expenses can only be changed by an exec" });
+    }
 
     const category = await db.query.budgetCategoriesTable.findFirst({
         where: { id: parsed.data.categoryId, eventId: existingExpense.eventId }
