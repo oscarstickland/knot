@@ -65,3 +65,14 @@ export function summariseDependencies(task: DependencySummaryInput): DependencyS
         blocking: isTaskComplete ? [] : dependents.filter((linked) => !linked.isComplete)
     };
 }
+
+export type DependencyCount = {
+    // Exact number of tasks this one depends on, complete or not.
+    total: number;
+    completed: number;
+};
+
+export function countDependencies(task: DependencySummaryInput): DependencyCount {
+    const { prerequisites } = summariseDependencies(task);
+    return { total: prerequisites.length, completed: prerequisites.filter((linked) => linked.isComplete).length };
+}

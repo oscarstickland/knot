@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { summariseDependencies, type DependencySummaryInput } from "../../src/lib/taskDependencies.ts";
+import { countDependencies, summariseDependencies, type DependencySummaryInput } from "../../src/lib/taskDependencies.ts";
 
 type Progress = "backlog" | "in_progress" | "in_review" | "completed";
 
@@ -86,5 +86,31 @@ describe("summariseDependencies", () => {
 
         expect(summary.blocking).toEqual([]);
         expect(summary.dependents).toEqual([]);
+    });
+});
+
+describe("countDependencies", () => {
+    it("counts zero for a task with no prerequisites", () => {
+        expect(countDependencies(task())).toEqual({ total: 0, completed: 0 });
+    });
+
+    it("counts every prerequisite for a multi-task dependency, split by completion", () => {
+        const counts = countDependencies(task({
+            dependsOn: [prerequisite(1, "completed"), prerequisite(2, "in_progress"), prerequisite(3, "backlog"), prerequisite(4, "completed")]
+        }));
+
+        expect(counts).toEqual({ total: 4, completed: 2 });
+    });
+
+    it("counts a prerequisite that could not be loaded as outstanding", () => {
+        const counts = countDependencies(task({ dependsOn: [{ taskId: 100, dependsOnTaskId: 7, dependsOnTask: null }] }));
+
+        expect(counts).toEqual({ total: 1, completed: 0 });
+    });
+
+    it("keeps counting prerequisites once the task itself is completed", () => {
+        const counts = countDependencies(task({ progress: "completed", dependsOn: [prerequisite(1, "completed"), prerequisite(2, "completed")] }));
+
+        expect(counts).toEqual({ total: 2, completed: 2 });
     });
 });
