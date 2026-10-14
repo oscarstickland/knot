@@ -34,6 +34,14 @@ const assignmentsWithUser = {
     with: { user: { columns: { id: true, name: true } } }
 } as const;
 
+// Linked tasks carry just enough to show what a task is waiting on (or holding up)
+// without the caller needing to be assigned to, or fetch, the other task.
+const linkedTaskSummary = { columns: { id: true, title: true, progress: true } } as const;
+const dependencyLinks = {
+    dependsOn: { with: { dependsOnTask: linkedTaskSummary } },
+    dependents: { with: { task: linkedTaskSummary } }
+} as const;
+
 async function loadClubTask(db: Db, taskId: number, clubId: number) {
     const task = await db.query.tasksTable.findFirst({
         where: { id: taskId },
@@ -136,7 +144,7 @@ tasksApp.get("/", async (c) => {
 
     const tasks = await db.query.tasksTable.findMany({
         where: { eventId },
-        with: { assignments: assignmentsWithUser, dependsOn: true, documents: true }
+        with: { assignments: assignmentsWithUser, ...dependencyLinks, documents: true }
     });
 
     return c.json(tasks);
@@ -152,7 +160,7 @@ tasksApp.get("/me", async (c) => {
             assignments: { userId: user.id },
             event: { clubId: user.club.id }
         },
-        with: { event: true, assignments: assignmentsWithUser, dependsOn: true, documents: true }
+        with: { event: true, assignments: assignmentsWithUser, ...dependencyLinks, documents: true }
     });
 
     return c.json(tasks);
@@ -165,7 +173,7 @@ tasksApp.get("/:id{[0-9]+}", async (c) => {
 
     const task = await db.query.tasksTable.findFirst({
         where: { id: taskId },
-        with: { event: true, assignments: assignmentsWithUser, dependsOn: true, documents: true, auditLog: true }
+        with: { event: true, assignments: assignmentsWithUser, ...dependencyLinks, documents: true, auditLog: true }
     });
 
     if (!task || !task.event || task.event.clubId !== user.club.id) throw new HTTPException(404, { message: "Task not found" });
