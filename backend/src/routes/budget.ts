@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { isAuthenticated, type UserEnv } from "../services/auth.ts";
 import type { DbEnv } from "../db/connection.ts";
 import { HTTPException } from "hono/http-exception";
-import { UpdateExpenseSchema } from "../types/budget.ts";
+import { SetReimbursementSchema, UpdateExpenseSchema } from "../types/budget.ts";
 import { budgetCategoriesTable, expensesTable } from "../db/schema.ts";
 import { eq, inArray, sql } from "drizzle-orm";
 
@@ -94,8 +94,40 @@ budgetApp.put("/expenses/:id{[0-9]+}", async (c) => {
         .set({
             categoryId: parsed.data.categoryId,
             amount: parsed.data.amount,
-            description: parsed.data.description
+            description: parsed.data.description,
+            paidPersonally: parsed.data.paidPersonally,
+            // Un-flagging a personal payment, or changing what was paid, voids any recorded reimbursement
+            ...(!parsed.data.paidPersonally || parsed.data.amount !== existingExpense.amount
+                ? { reimbursedAt: null, reimbursedBy: null }
+                : {})
         })
+        .where(eq(expensesTable.id, expenseId))
+        .returning();
+
+    return c.json(expense);
+});
+
+// Execs and admins mark a personally paid expense as reimbursed (or undo that).
+budgetApp.patch("/expenses/:id{[0-9]+}/reimbursement", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
+
+    const expenseId = Number(c.req.param("id"));
+    const parsed = SetReimbursementSchema.safeParse(await c.req.json());
+    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+
+    const existingExpense = await loadManageableExpense(db, expenseId, user);
+    if (!existingExpense) throw new HTTPException(404, { message: "Expense not found" });
+    if (!existingExpense.paidPersonally) {
+        throw new HTTPException(400, { message: "Expense was not paid personally" });
+    }
+
+    const [expense] = await db
+        .update(expensesTable)
+        .set(parsed.data.reimbursed
+            ? { reimbursedAt: new Date(), reimbursedBy: user.id }
+            : { reimbursedAt: null, reimbursedBy: null })
         .where(eq(expensesTable.id, expenseId))
         .returning();
 

@@ -18,10 +18,15 @@ export const SetEventBudgetSchema = z.object({
 export const CreateExpenseSchema = z.object({
     categoryId: z.number().int().positive(),
     amount: z.number().positive(),
-    description: z.string().min(1, "Description cannot be empty").max(500)
+    description: z.string().min(1, "Description cannot be empty").max(500),
+    paidPersonally: z.boolean().default(false)
 });
 
 export const UpdateExpenseSchema = CreateExpenseSchema;
+
+export const SetReimbursementSchema = z.object({
+    reimbursed: z.boolean()
+});
 
 export type BudgetCategoryInput = z.infer<typeof BudgetCategoryInputSchema>;
 export type SetEventBudgetData = z.infer<typeof SetEventBudgetSchema>;
@@ -47,6 +52,8 @@ export type EventBudgetSummary = {
     expenses: ExpenseWithRelations[];
     totalAllocated: number;
     totalSpent: number;
+    // Sum of personally paid expenses that haven't been reimbursed yet.
+    totalOwed: number;
 };
 
 // Standard members only see category names (to log against) and their own expenses.
