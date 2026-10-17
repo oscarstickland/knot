@@ -1,9 +1,13 @@
 import { defineRelations } from "drizzle-orm";
-import {boolean, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, varchar} from "drizzle-orm/pg-core";
+import {boolean, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, unique, varchar} from "drizzle-orm/pg-core";
 
 export const userRoles = ["standard", "exec", "admin"] as const;
 export type UserRole = (typeof userRoles)[number];
 export const rolesEnum = pgEnum("roles", userRoles);
+
+export const userStatuses = ["active", "offboarded"] as const;
+export type UserStatus = (typeof userStatuses)[number];
+export const userStatusEnum = pgEnum("user_status", userStatuses);
 
 export const taskPriorities = ["low", "medium", "high"] as const;
 export const taskPriorityEnum = pgEnum("task_priority", taskPriorities);
@@ -25,16 +29,21 @@ export const usersTable = pgTable("users", {
     email: varchar({ length: 255 }).notNull().unique(),
     password: varchar({ length: 500 }).notNull(),
     role: rolesEnum().default("standard").notNull(),
+    status: userStatusEnum().default("active").notNull(),
     clubId: integer("club_id").notNull(),
 });
 
 export const eventsTable = pgTable("events", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     name: varchar({ length: 255 }).notNull(),
+    slug: varchar({ length: 36 }).notNull().unique().$defaultFn(() => crypto.randomUUID()),
     start: timestamp("start_time", { mode: "date", withTimezone: true }).notNull(),
     end: timestamp("end_time", { mode: "date", withTimezone: true }).notNull(),
+    location: varchar({ length: 255 }).notNull(),
     clubId: integer("club_id").notNull(),
     archived: boolean("archived").default(false).notNull(),
+    attendanceOpen: boolean("attendance_open").default(false).notNull(),
+    expectedAttendees: integer("expected_attendees"),
 });
 
 export const tasksTable = pgTable("tasks", {
@@ -81,6 +90,49 @@ export const taskAuditLogTable = pgTable("task_audit_log", {
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
 });
 
+export const eventAttendanceTable = pgTable("event_attendance", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    eventId: integer("event_id").notNull(),
+    name: varchar({ length: 250 }).notNull(),
+    email: varchar({ length: 255 }).notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull()
+}, (table) => [
+    unique().on(table.eventId, table.email)
+])
+
+export const budgetCategoriesTable = pgTable("budget_categories", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    eventId: integer("event_id").notNull(),
+    name: varchar({ length: 255 }).notNull(),
+    allocatedAmount: numeric("allocated_amount", { precision: 10, scale: 2, mode: "number" }).notNull().default(0),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+    unique().on(table.eventId, table.name)
+]);
+
+export const expensesTable = pgTable("expenses", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    eventId: integer("event_id").notNull(),
+    categoryId: integer("category_id").notNull(),
+    amount: numeric({ precision: 10, scale: 2, mode: "number" }).notNull(),
+    description: varchar({ length: 500 }).notNull(),
+    createdBy: integer("created_by").notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+    // Set when the creator paid out of pocket and is owed money back by the club.
+    paidPersonally: boolean("paid_personally").default(false).notNull(),
+    reimbursedAt: timestamp("reimbursed_at", { mode: "date", withTimezone: true }),
+    reimbursedBy: integer("reimbursed_by"),
+});
+
+export const eventDocumentsTable = pgTable("event_documents", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    eventId: integer("event_id").notNull(),
+    title: varchar({ length: 255 }).notNull(),
+    url: varchar({ length: 2048 }).notNull(),
+    addedBy: integer("added_by").notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+});
+
 export const relations = defineRelations({
     clubsTable,
     usersTable,
@@ -89,7 +141,11 @@ export const relations = defineRelations({
     taskAssignmentsTable,
     taskDependenciesTable,
     taskDocumentsTable,
-    taskAuditLogTable
+    taskAuditLogTable,
+    eventAttendanceTable,
+    budgetCategoriesTable,
+    expensesTable,
+    eventDocumentsTable
 }, (r) => ({
     usersTable: {
         club: r.one.clubsTable({
@@ -101,7 +157,11 @@ export const relations = defineRelations({
         club: r.one.clubsTable({
             from: r.eventsTable.clubId,
             to: r.clubsTable.id
-        })
+        }),
+        attendance: r.many.eventAttendanceTable(),
+        budgetCategories: r.many.budgetCategoriesTable(),
+        expenses: r.many.expensesTable(),
+        documents: r.many.eventDocumentsTable()
     },
     clubsTable: {
         users: r.many.usersTable(),
@@ -165,6 +225,43 @@ export const relations = defineRelations({
         }),
         changedByUser: r.one.usersTable({
             from: r.taskAuditLogTable.changedBy,
+            to: r.usersTable.id
+        })
+    },
+    eventAttendanceTable: {
+        event: r.one.eventsTable({
+            from: r.eventAttendanceTable.eventId,
+            to: r.eventsTable.id
+        })
+    },
+    budgetCategoriesTable: {
+        event: r.one.eventsTable({
+            from: r.budgetCategoriesTable.eventId,
+            to: r.eventsTable.id
+        }),
+        expenses: r.many.expensesTable()
+    },
+    expensesTable: {
+        event: r.one.eventsTable({
+            from: r.expensesTable.eventId,
+            to: r.eventsTable.id
+        }),
+        category: r.one.budgetCategoriesTable({
+            from: r.expensesTable.categoryId,
+            to: r.budgetCategoriesTable.id
+        }),
+        creator: r.one.usersTable({
+            from: r.expensesTable.createdBy,
+            to: r.usersTable.id
+        })
+    },
+    eventDocumentsTable: {
+        event: r.one.eventsTable({
+            from: r.eventDocumentsTable.eventId,
+            to: r.eventsTable.id
+        }),
+        addedByUser: r.one.usersTable({
+            from: r.eventDocumentsTable.addedBy,
             to: r.usersTable.id
         })
     }

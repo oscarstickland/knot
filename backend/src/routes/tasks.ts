@@ -16,6 +16,8 @@ import {
     tasksTable
 } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
+import { describeZodError } from "../types/errors.ts";
+import { findCyclicDependency } from "../services/task-dependencies.ts";
 
 type Db = DbEnv["Variables"]["db"];
 
@@ -25,6 +27,20 @@ tasksApp.use("*", isAuthenticated);
 function isExecOrAdmin(role: string): boolean {
     return role === "exec" || role === "admin";
 }
+
+// Assignee names are included so members without access to the full member list
+// can still see who a task is assigned to.
+const assignmentsWithUser = {
+    with: { user: { columns: { id: true, name: true } } }
+} as const;
+
+// Linked tasks carry just enough to show what a task is waiting on (or holding up)
+// without the caller needing to be assigned to, or fetch, the other task.
+const linkedTaskSummary = { columns: { id: true, title: true, progress: true } } as const;
+const dependencyLinks = {
+    dependsOn: { with: { dependsOnTask: linkedTaskSummary } },
+    dependents: { with: { task: linkedTaskSummary } }
+} as const;
 
 async function loadClubTask(db: Db, taskId: number, clubId: number) {
     const task = await db.query.tasksTable.findFirst({
@@ -50,8 +66,13 @@ async function assertUsersInClub(db: Db, userIds: number[], clubId: number) {
         where: { id: { in: userIds }, clubId }
     });
 
-    if (members.length !== new Set(userIds).size) {
-        throw new HTTPException(400, { message: "One or more assignees are not members of this club" });
+    const uniqueUserIds = new Set(userIds);
+    if (members.length !== uniqueUserIds.size) {
+        const memberIds = new Set(members.map((member) => member.id));
+        const invalidIds = [...uniqueUserIds].filter((id) => !memberIds.has(id));
+        throw new HTTPException(400, {
+            message: `Cannot assign user(s) with ID ${invalidIds.join(", ")} as they are not members of this club`
+        });
     }
 }
 
@@ -66,8 +87,13 @@ async function assertDependenciesInEvent(db: Db, dependencyIds: number[], eventI
         where: { id: { in: dependencyIds }, eventId }
     });
 
-    if (dependencyTasks.length !== new Set(dependencyIds).size) {
-        throw new HTTPException(400, { message: "One or more dependencies do not belong to this event" });
+    const uniqueDependencyIds = new Set(dependencyIds);
+    if (dependencyTasks.length !== uniqueDependencyIds.size) {
+        const foundIds = new Set(dependencyTasks.map((task) => task.id));
+        const invalidIds = [...uniqueDependencyIds].filter((id) => !foundIds.has(id));
+        throw new HTTPException(400, {
+            message: `Cannot depend on task ID ${invalidIds.join(", ")} as it does not belong to this event`
+        });
     }
 }
 
@@ -80,29 +106,14 @@ async function assertNoDependencyCycle(db: Db, eventId: number, taskId: number, 
         .innerJoin(tasksTable, eq(tasksTable.id, taskDependenciesTable.taskId))
         .where(eq(tasksTable.eventId, eventId));
 
-    const adjacency = new Map<number, number[]>();
-    for (const dependency of existingDependencies) {
-        if (dependency.taskId === taskId) continue;
-        const existing = adjacency.get(dependency.taskId) ?? [];
-        existing.push(dependency.dependsOnTaskId);
-        adjacency.set(dependency.taskId, existing);
-    }
+    const cyclicDependencyId = findCyclicDependency(existingDependencies, taskId, dependencyIds);
+    if (cyclicDependencyId === null) return;
 
-    function canReach(from: number, target: number, visited: Set<number>): boolean {
-        if (from === target) return true;
-        if (visited.has(from)) return false;
-        visited.add(from);
-        for (const next of adjacency.get(from) ?? []) {
-            if (canReach(next, target, visited)) return true;
-        }
-        return false;
-    }
-
-    for (const dependencyId of dependencyIds) {
-        if (canReach(dependencyId, taskId, new Set())) {
-            throw new HTTPException(400, { message: "This dependency would create a circular dependency" });
-        }
-    }
+    const dependencyTask = await db.query.tasksTable.findFirst({ where: { id: cyclicDependencyId } });
+    const dependencyName = dependencyTask?.title ?? `Task ${cyclicDependencyId}`;
+    throw new HTTPException(400, {
+        message: `Cannot depend on "${dependencyName}" as it already depends on this task, either directly or transitively`
+    });
 }
 
 async function assertDependenciesCompleted(db: Db, taskId: number, taskTitle: string) {
@@ -133,7 +144,7 @@ tasksApp.get("/", async (c) => {
 
     const tasks = await db.query.tasksTable.findMany({
         where: { eventId },
-        with: { assignments: true, dependsOn: true, documents: true }
+        with: { assignments: assignmentsWithUser, ...dependencyLinks, documents: true }
     });
 
     return c.json(tasks);
@@ -149,7 +160,7 @@ tasksApp.get("/me", async (c) => {
             assignments: { userId: user.id },
             event: { clubId: user.club.id }
         },
-        with: { event: true, assignments: true, dependsOn: true, documents: true }
+        with: { event: true, assignments: assignmentsWithUser, ...dependencyLinks, documents: true }
     });
 
     return c.json(tasks);
@@ -162,7 +173,7 @@ tasksApp.get("/:id{[0-9]+}", async (c) => {
 
     const task = await db.query.tasksTable.findFirst({
         where: { id: taskId },
-        with: { event: true, assignments: true, dependsOn: true, documents: true, auditLog: true }
+        with: { event: true, assignments: assignmentsWithUser, ...dependencyLinks, documents: true, auditLog: true }
     });
 
     if (!task || !task.event || task.event.clubId !== user.club.id) throw new HTTPException(404, { message: "Task not found" });
@@ -173,11 +184,11 @@ tasksApp.get("/:id{[0-9]+}", async (c) => {
 tasksApp.post("/", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can create tasks" });
 
     const body = await c.req.json();
     const parsed = CreateTaskSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const event = await db.query.eventsTable.findFirst({
         where: { id: parsed.data.eventId, clubId: user.club.id }
@@ -230,12 +241,12 @@ tasksApp.post("/", async (c) => {
 tasksApp.put("/:id{[0-9]+}", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can edit tasks" });
 
     const taskId = Number(c.req.param("id"));
     const body = await c.req.json();
     const parsed = UpdateTaskSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const existingTask = await loadClubTask(db, taskId, user.club.id);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
@@ -295,11 +306,11 @@ tasksApp.patch("/:id{[0-9]+}/progress", async (c) => {
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
 
     const allowed = isExecOrAdmin(user.role) || await isAssignedToTask(db, taskId, user.id);
-    if (!allowed) throw new HTTPException(403);
+    if (!allowed) throw new HTTPException(403, { message: "Only club admins, execs, or users assigned to this task can update its progress" });
 
     const body = await c.req.json();
     const parsed = UpdateTaskProgressSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     if (parsed.data.progress === "completed") {
         await assertDependenciesCompleted(db, taskId, existingTask.title);
@@ -334,11 +345,11 @@ tasksApp.post("/:id{[0-9]+}/documents", async (c) => {
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
 
     const allowed = isExecOrAdmin(user.role) || await isAssignedToTask(db, taskId, user.id);
-    if (!allowed) throw new HTTPException(403);
+    if (!allowed) throw new HTTPException(403, { message: "Only club admins, execs, or users assigned to this task can add documents to it" });
 
     const body = await c.req.json();
     const parsed = AddTaskDocumentSchema.safeParse(body);
-    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const document = await db.transaction(async (tx) => {
         const [document] = await tx

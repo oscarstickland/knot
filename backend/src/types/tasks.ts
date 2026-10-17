@@ -37,9 +37,30 @@ export type TaskAuditLogEntry = typeof taskAuditLogTable.$inferSelect;
 export type TaskAssignment = typeof taskAssignmentsTable.$inferSelect;
 export type TaskDependency = typeof taskDependenciesTable.$inferSelect;
 
+export type TaskAssignee = {
+    id: number;
+    name: string;
+};
+
+export type TaskAssignmentWithUser = TaskAssignment & {
+    user: TaskAssignee | null;
+};
+
+// Minimal view of a task on the other side of a dependency link.
+export type LinkedTaskSummary = Pick<Task, "id" | "title" | "progress">;
+
+export type TaskPrerequisite = TaskDependency & {
+    dependsOnTask: LinkedTaskSummary | null;
+};
+
+export type TaskDependent = TaskDependency & {
+    task: LinkedTaskSummary | null;
+};
+
 export type TaskWithRelations = Task & {
-    assignments: TaskAssignment[];
-    dependsOn: TaskDependency[];
+    assignments: TaskAssignmentWithUser[];
+    dependsOn: TaskPrerequisite[];
+    dependents: TaskDependent[];
     documents: TaskDocument[];
     event: ClubEvent;
 };

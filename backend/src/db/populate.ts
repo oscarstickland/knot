@@ -2,8 +2,11 @@ import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import {
+    budgetCategoriesTable,
     clubsTable,
+    eventDocumentsTable,
     eventsTable,
+    expensesTable,
     relations,
     taskAssignmentsTable,
     taskAuditLogTable,
@@ -69,9 +72,20 @@ async function generateData() {
     };
     const [insertedUser3] = await db.insert(usersTable).values(user3).returning();
 
+    const user4: typeof usersTable.$inferInsert = {
+        name: "Priya Nair",
+        email: "offboarded@gmail.com",
+        password: await hashPassword("password"),
+        role: "standard",
+        status: "offboarded",
+        clubId: insertedClub1!.id
+    };
+    const [insertedUser4] = await db.insert(usersTable).values(user4).returning();
+
     console.log("-- Inserting Events");
     const event1: typeof eventsTable.$inferInsert = {
         name: "MAC Open Day",
+        location: "Student Union Building",
         clubId: insertedClub1!.id,
         start: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
         end: new Date(Date.now() + 3.1 * 24 * 60 * 60 * 1000)
@@ -80,6 +94,7 @@ async function generateData() {
 
     const event2: typeof eventsTable.$inferInsert = {
         name: "MACathon",
+        location: "Engineering Building, Room 201",
         clubId: insertedClub1!.id,
         start: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
         end: new Date(Date.now() + 5.1 * 24 * 60 * 60 * 1000)
@@ -88,12 +103,13 @@ async function generateData() {
 
     const event3: typeof eventsTable.$inferInsert = {
         name: "Welcome BBQ",
+        location: "Main Oval",
         clubId: insertedClub1!.id,
         start: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
         end: new Date(Date.now() - 9.9 * 24 * 60 * 60 * 1000),
         archived: true
     }
-    await db.insert(eventsTable).values(event3);
+    const [insertedEvent3] = await db.insert(eventsTable).values(event3).returning();
 
     console.log("-- Inserting Tasks");
     const task1: typeof tasksTable.$inferInsert = {
@@ -137,6 +153,12 @@ async function generateData() {
         url: "https://example.com/venue-contract.pdf",
         addedBy: insertedUser1!.id
     });
+    // Added before this member was offboarded - stays attributed to them.
+    await db.insert(taskDocumentsTable).values({
+        taskId: insertedTask2!.id,
+        url: "https://example.com/invite-draft.pdf",
+        addedBy: insertedUser4!.id
+    });
 
     console.log("-- Inserting Task Audit Log");
     await db.insert(taskAuditLogTable).values({
@@ -145,6 +167,89 @@ async function generateData() {
         action: "created",
         changes: task1
     });
+
+    console.log("-- Inserting Budget Categories");
+    const [venueCategory, cateringCategory, marketingCategory] = await db
+        .insert(budgetCategoriesTable)
+        .values([
+            { eventId: insertedEvent1!.id, name: "Venue", allocatedAmount: 500 },
+            { eventId: insertedEvent1!.id, name: "Catering", allocatedAmount: 300 },
+            { eventId: insertedEvent1!.id, name: "Marketing", allocatedAmount: 150 },
+            { eventId: insertedEvent1!.id, name: "Equipment", allocatedAmount: 0 }
+        ])
+        .returning();
+
+    console.log("-- Inserting Expenses");
+    await db.insert(expensesTable).values([
+        {
+            eventId: insertedEvent1!.id,
+            categoryId: venueCategory!.id,
+            amount: 480,
+            description: "Hall booking deposit",
+            createdBy: insertedUser1!.id
+        },
+        {
+            eventId: insertedEvent1!.id,
+            categoryId: cateringCategory!.id,
+            amount: 320,
+            description: "Catering for open day",
+            createdBy: insertedUser2!.id,
+            paidPersonally: true
+        },
+        {
+            eventId: insertedEvent1!.id,
+            categoryId: marketingCategory!.id,
+            amount: 60,
+            description: "Printed flyers",
+            createdBy: insertedUser2!.id,
+            paidPersonally: true,
+            reimbursedAt: new Date(),
+            reimbursedBy: insertedUser1!.id
+        }
+    ]);
+
+    console.log("-- Inserting Event Documents");
+    await db.insert(eventDocumentsTable).values([
+        {
+            eventId: insertedEvent1!.id,
+            title: "Run sheet",
+            url: "https://docs.google.com/document/d/example-run-sheet",
+            addedBy: insertedUser1!.id
+        },
+        {
+            eventId: insertedEvent1!.id,
+            title: "Volunteer roster",
+            url: "https://docs.google.com/spreadsheets/d/example-roster",
+            addedBy: insertedUser2!.id
+        }
+    ]);
+
+    // Other events reuse category names (with different case/whitespace) so the club-wide category view merges them.
+    console.log("-- Inserting Budget Categories for other events");
+    const [hackathonVenue, hackathonCatering, hackathonPrizes] = await db
+        .insert(budgetCategoriesTable)
+        .values([
+            { eventId: insertedEvent2!.id, name: "Venue ", allocatedAmount: 250 },
+            { eventId: insertedEvent2!.id, name: "Catering", allocatedAmount: 600 },
+            { eventId: insertedEvent2!.id, name: "Prizes", allocatedAmount: 400 }
+        ])
+        .returning();
+    const [bbqCatering, bbqEquipment] = await db
+        .insert(budgetCategoriesTable)
+        .values([
+            { eventId: insertedEvent3!.id, name: "catering", allocatedAmount: 200 },
+            { eventId: insertedEvent3!.id, name: "Equipment", allocatedAmount: 80 }
+        ])
+        .returning();
+
+    console.log("-- Inserting Expenses for other events");
+    await db.insert(expensesTable).values([
+        { eventId: insertedEvent2!.id, categoryId: hackathonVenue!.id, amount: 250, description: "Room booking", createdBy: insertedUser1!.id },
+        { eventId: insertedEvent2!.id, categoryId: hackathonCatering!.id, amount: 412.5, description: "Pizza for 60", createdBy: insertedUser2!.id },
+        { eventId: insertedEvent2!.id, categoryId: hackathonPrizes!.id, amount: 300, description: "Gift cards for winners", createdBy: insertedUser1!.id },
+        { eventId: insertedEvent3!.id, categoryId: bbqCatering!.id, amount: 236.4, description: "Sausages and bread", createdBy: insertedUser2!.id },
+        { eventId: insertedEvent3!.id, categoryId: bbqEquipment!.id, amount: 45, description: "Gas bottle refill", createdBy: insertedUser2!.id }
+    ]);
 
     await pool.end();
 }

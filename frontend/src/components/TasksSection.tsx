@@ -1,92 +1,95 @@
 import { useState } from "react";
 import {
     Avatar,
-    Button,
+    Checkbox,
     Empty,
-    Form,
-    Input,
     Result,
     Select,
-    Space,
     Table,
     Tag,
     Tooltip,
     Typography,
-    notification,
     theme,
     type TableProps
 } from "antd";
 import useSWR, { mutate } from "swr";
-import { Controller, useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import {
-    AddTaskDocumentSchema,
-    taskProgressStates,
-    type TaskWithRelations
-} from "@knot/backend/tasks";
-import type { ClubMember } from "@knot/backend/user";
+import { taskProgressStates, type TaskWithRelations } from "@knot/backend/tasks";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
 import { useUser } from "@/lib/auth.tsx";
-import { TaskModal } from "@/components/TaskModal.tsx";
+import { TaskDrawer } from "@/components/TaskDrawer.tsx";
 import dayjs from "dayjs";
-import { EditOutlined, LinkOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
-import { progressColor, progressLabel } from "@/components/TaskStatusPill.tsx";
+import { UserOutlined } from "@ant-design/icons";
+import { priorityColor, ProgressTag, progressLabel } from "@/components/TaskStatusPill.tsx";
+import { completedRowStyle, isTaskCompleted } from "@/lib/taskCompletion.ts";
+import { useAppNotification } from "@/lib/useAppNotification";
+import { summariseDependencies } from "@/lib/taskDependencies.ts";
+import { DependencyCount, LinkedTaskTags } from "@/components/TaskDependencyIndicator.tsx";
 
 const { Text } = Typography;
 
-const priorityColor: Record<string, string> = {
-    low: "default",
-    medium: "gold",
-    high: "red"
-};
-
-const progressOptions = taskProgressStates.map((progress) => ({
+// Completion is locked while prerequisites are outstanding, mirroring the server rule.
+const progressOptions = (isWaiting: boolean) => taskProgressStates.map((progress) => ({
     label: progressLabel(progress),
-    value: progress
+    value: progress,
+    disabled: isWaiting && progress === "completed"
 }));
+
+function waitingOnMessage(task: TaskWithRelations): string | null {
+    const { waitingOn } = summariseDependencies(task);
+    if (waitingOn.length === 0) return null;
+    return `Finish ${waitingOn.map((linked) => linked.title).join(", ")} before completing this task`;
+}
 
 export function TasksSection(props: { eventId: number }) {
     const { token } = theme.useToken();
     const user = useUser();
     const isTaskManager = user.role === "admin" || user.role === "exec";
     const { data: tasks, isLoading, error } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${props.eventId}`);
-    const { data: members } = useSWR<ClubMember[]>(isTaskManager ? "/user" : null);
-    const memberById = new Map((members ?? []).map((member) => [member.id, member]));
+    const [openTaskId, setOpenTaskId] = useState<number | null>(null);
 
     if (error) {
-        return <Result status="error" title="Retrieval Error" subTitle="Unable to fetch tasks." />
+        return <Result status="error" title="Retrieval Error" subTitle="Something went wrong loading tasks for this event. Try refreshing the page." />
     }
 
-    return <div style={{ marginTop: "32px" }}>
+    return <div>
         <div style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            justifyContent: 'flex-end',
             paddingBottom: "16px"
         }}>
-            <Text strong style={{ fontSize: "16px" }}>Tasks</Text>
-            { isTaskManager ? <TaskModal mode="create" eventId={props.eventId} /> : "" }
+            { isTaskManager ? <TaskDrawer mode="create" eventId={props.eventId} /> : "" }
         </div>
 
         <Table
             rowKey="id"
+            size="small"
             loading={isLoading}
             dataSource={tasks ?? []}
             pagination={false}
+            scroll={{ x: "max-content" }}
             locale={{ emptyText: <Empty description="No tasks yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-            expandable={{
-                expandedRowRender: (task) => (
-                    <TaskDetailsRow task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
-                )
-            }}
+            onRow={(task) => ({
+                onClick: () => setOpenTaskId(task.id),
+                style: { cursor: "pointer", ...completedRowStyle(task, token).row }
+            })}
             columns={[
+                {
+                    key: "complete",
+                    width: 36,
+                    onCell: (task) => ({ style: completedRowStyle(task, token).firstCell }),
+                    render: (_, task) => (
+                        <div onClick={(e) => e.stopPropagation()}>
+                            <CompleteCheckbox task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
+                        </div>
+                    )
+                },
                 {
                     key: "title",
                     title: "Task",
                     dataIndex: "title",
                     render: (title, task) => <div>
-                        <Text strong>{title}</Text>
+                        <Text strong delete={isTaskCompleted(task)} type={isTaskCompleted(task) ? "secondary" : undefined}>{title}</Text>
                         <br />
                         <Text type="secondary" style={{ fontSize: "12px" }}>{task.description}</Text>
                     </div>
@@ -96,6 +99,7 @@ export function TasksSection(props: { eventId: number }) {
                     title: "Priority",
                     dataIndex: "priority",
                     width: 110,
+                    responsive: ["sm"],
                     render: (priority) => <Tag color={priorityColor[priority]}>{priority.toUpperCase()}</Tag>
                 },
                 {
@@ -104,21 +108,37 @@ export function TasksSection(props: { eventId: number }) {
                     dataIndex: "progress",
                     width: 170,
                     render: (_, task) => (
-                        <ProgressSelect task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
+                        <div onClick={(e) => e.stopPropagation()}>
+                            <ProgressSelect task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
+                        </div>
                     )
+                },
+                {
+                    key: "dependencyCount",
+                    title: "Dependencies",
+                    width: 130,
+                    responsive: ["md"],
+                    render: (_, task) => <DependencyCount task={task} />
+                },
+                {
+                    key: "dependsOn",
+                    title: "Depends On",
+                    width: 160,
+                    responsive: ["xl"],
+                    render: (_, task) => <LinkedTaskTags tasks={summariseDependencies(task).prerequisites} emptyText="—" />
                 },
                 {
                     key: "assignees",
                     title: "Assignees",
                     width: 130,
+                    responsive: ["lg"],
                     render: (_, task) => (
                         <Avatar.Group max={{ count: 3 }}>
-                            {task.assignments.map((assignment) => {
-                                const member = memberById.get(assignment.userId);
-                                return <Tooltip key={assignment.userId} title={member?.name ?? `User ${assignment.userId}`}>
+                            {task.assignments.map((assignment) => (
+                                <Tooltip key={assignment.userId} title={assignment.user?.name ?? `User ${assignment.userId}`}>
                                     <Avatar size="small" icon={<UserOutlined />} />
                                 </Tooltip>
-                            })}
+                            ))}
                         </Avatar.Group>
                     )
                 },
@@ -126,38 +146,37 @@ export function TasksSection(props: { eventId: number }) {
                     key: "dueDate",
                     title: "Due",
                     width: 150,
+                    responsive: ["md"],
                     render: (_, task) => task.dueDate
                         ? <Text style={{ color: token.colorTextSecondary }}>{dayjs(task.dueDate).format("D MMM YYYY")}</Text>
                         : <Text type="secondary">—</Text>
-                },
-                {
-                    key: "actions",
-                    title: "",
-                    width: 40,
-                    render: (_, task) => isTaskManager
-                        ? <TaskModal
-                            mode="update"
-                            eventId={props.eventId}
-                            task={task}
-                            trigger={<Button size="small" type="text" icon={<EditOutlined />} />}
-                        />
-                        : null
                 }
             ] as TableProps<TaskWithRelations>['columns']}
         />
+
+        {(tasks ?? []).map((task) => (
+            <TaskDrawer
+                key={task.id}
+                mode="update"
+                eventId={props.eventId}
+                task={task}
+                isTaskManager={isTaskManager}
+                open={openTaskId === task.id}
+                onOpenChange={(value) => setOpenTaskId(value ? task.id : null)}
+            />
+        ))}
     </div>
 }
 
-function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
+function useTaskProgress(task: TaskWithRelations, eventId: number) {
     const user = useUser();
-    const [api, contextHolder] = notification.useNotification();
-    const isAssigned = props.task.assignments.some((assignment) => assignment.userId === user.id);
-    const canEdit = props.isTaskManager || isAssigned;
+    const [api, contextHolder] = useAppNotification();
+    const isAssigned = task.assignments.some((assignment) => assignment.userId === user.id);
 
     const updateProgress = (progress: string) => {
-        AxiosInstance.patch(`/tasks/${props.task.id}/progress`, { progress })
+        AxiosInstance.patch(`/tasks/${task.id}/progress`, { progress })
             .then(async () => {
-                await mutate(`/tasks?eventId=${props.eventId}`);
+                await mutate(`/tasks?eventId=${eventId}`);
             })
             .catch((err) => {
                 const message = err?.response?.data?.message ?? "Task progress could not be updated.";
@@ -165,9 +184,34 @@ function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTas
             });
     }
 
+    return { isAssigned, updateProgress, contextHolder };
+}
+
+function CompleteCheckbox(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
+    const { isAssigned, updateProgress, contextHolder } = useTaskProgress(props.task, props.eventId);
+    const canEdit = props.isTaskManager || isAssigned;
+    const waitingMessage = waitingOnMessage(props.task);
+
+    return <>
+        {contextHolder}
+        <Tooltip title={canEdit ? waitingMessage : null}>
+            <Checkbox
+                disabled={!canEdit || waitingMessage !== null}
+                checked={props.task.progress === "completed"}
+                onChange={(e) => updateProgress(e.target.checked ? "completed" : "in_progress")}
+                aria-label={waitingMessage ?? `Mark ${props.task.title} as complete`}
+            />
+        </Tooltip>
+    </>
+}
+
+function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
+    const { isAssigned, updateProgress, contextHolder } = useTaskProgress(props.task, props.eventId);
+    const canEdit = props.isTaskManager || isAssigned;
+
     if (!canEdit) return <>
         {contextHolder}
-        <Tag color={progressColor[props.task.progress]}>{progressLabel(props.task.progress)}</Tag>
+        <ProgressTag progress={props.task.progress} />
     </>
 
     return <>
@@ -175,89 +219,9 @@ function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTas
         <Select
             size="small"
             value={props.task.progress}
-            options={progressOptions}
+            options={progressOptions(waitingOnMessage(props.task) !== null)}
             style={{ width: "100%" }}
             onChange={updateProgress}
         />
-    </>
-}
-
-function TaskDetailsRow(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
-    const { token } = theme.useToken();
-    const user = useUser();
-    const { data: eventTasks } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${props.eventId}`);
-    const taskById = new Map((eventTasks ?? []).map((task) => [task.id, task]));
-    const isAssigned = props.task.assignments.some((assignment) => assignment.userId === user.id);
-    const canAddDocument = props.isTaskManager || isAssigned;
-
-    return <div style={{ padding: "8px 16px", background: token.colorBgLayout }}>
-        {props.task.dependsOn.length > 0 && <div style={{ marginBottom: "12px" }}>
-            <Text type="secondary" style={{ fontSize: "12px" }}>Depends on: </Text>
-            <Space size={[4, 4]} wrap>
-                {props.task.dependsOn.map((dependency) => {
-                    const dependencyTask = taskById.get(dependency.dependsOnTaskId);
-                    return <Tag key={dependency.dependsOnTaskId} color={dependencyTask?.progress === "completed" ? "green" : "default"}>
-                        {dependencyTask?.title ?? `Task ${dependency.dependsOnTaskId}`}
-                    </Tag>
-                })}
-            </Space>
-        </div>}
-
-        <Text type="secondary" style={{ fontSize: "12px" }}>Links:</Text>
-        <div style={{ marginTop: "4px", marginBottom: "8px" }}>
-            {props.task.documents.length === 0
-                ? <Text type="secondary" style={{ fontSize: "12px" }}>No links added yet.</Text>
-                : <Space direction="vertical" size={2}>
-                    {props.task.documents.map((document) => (
-                        <a key={document.id} href={document.url} target="_blank" rel="noreferrer">
-                            <LinkOutlined /> {document.url}
-                        </a>
-                    ))}
-                </Space>
-            }
-        </div>
-
-        {canAddDocument && <AddDocumentForm taskId={props.task.id} eventId={props.eventId} />}
-    </div>
-}
-
-const AddDocumentFormSchema = AddTaskDocumentSchema;
-type AddDocumentFormData = z.infer<typeof AddDocumentFormSchema>;
-
-function AddDocumentForm(props: { taskId: number; eventId: number }) {
-    const [api, contextHolder] = notification.useNotification();
-    const { handleSubmit, formState: { errors }, control, reset } = useForm<AddDocumentFormData>({
-        resolver: zodResolver(AddDocumentFormSchema),
-        defaultValues: { url: "" }
-    });
-
-    const submit = (data: AddDocumentFormData) => {
-        AxiosInstance.post(`/tasks/${props.taskId}/documents`, data)
-            .then(async () => {
-                await mutate(`/tasks?eventId=${props.eventId}`);
-                reset();
-            })
-            .catch((err) => {
-                const message = err?.response?.data?.message ?? "Link could not be added.";
-                api["error"]({ title: "Error", description: message });
-            });
-    }
-
-    return <>
-        {contextHolder}
-        <form onSubmit={handleSubmit(submit)} style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
-            <Form.Item
-                validateStatus={errors.url ? "error" : ""}
-                help={errors.url?.message}
-                style={{ marginBottom: 0, flex: 1 }}
-            >
-                <Controller
-                    name="url"
-                    control={control}
-                    render={({ field }) => <Input {...field} size="small" placeholder="https://..." />}
-                />
-            </Form.Item>
-            <Button size="small" icon={<PlusOutlined />} htmlType="submit">Add Link</Button>
-        </form>
     </>
 }

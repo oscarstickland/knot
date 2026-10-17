@@ -1,0 +1,194 @@
+import {Button, Layout, Popconfirm, Result, Space, Spin, Tag, theme, Typography, notification, type TabsProps, Tabs} from "antd";
+import {useState} from "react";
+import {useNavigate, useParams} from "react-router";
+import useSWR, {mutate} from "swr";
+import {type ClubEvent, UpdateEventSchema} from "@knot/backend/events";
+import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+import {EventModal} from "@/components/EventModal.tsx";
+import {TasksSection} from "@/components/TasksSection.tsx";
+import {AxiosInstance} from "@/lib/fetcher.tsx";
+import type {AxiosError} from "axios";
+import {useUser} from "@/lib/auth.tsx";
+import {DeleteOutlined, InboxOutlined, LockOutlined, UnlockOutlined} from "@ant-design/icons";
+import { OverviewTab } from "./OverviewTab";
+import { TasksTab } from "./TasksTab";
+import { BudgetTab } from "./BudgetTab";
+import { AttendanceTab } from "./AttendanceTab";
+import { DocumentsTab } from "./DocumentsTab";
+import { useAppNotification } from "@/lib/useAppNotification";
+
+const { Text, Title } = Typography;
+dayjs.extend(relativeTime);
+
+export function EventPage() {
+    const { token } = theme.useToken();
+    const { id } = useParams<{ id: string }>();
+
+    if (!id) return <p>Unable to retrieve param</p>
+
+    return <Layout style={{ padding: "24px 24px" }}>
+        <Layout
+            style={{
+                padding: 24,
+                background: token.colorBgContainer,
+                borderRadius: token.borderRadiusLG
+            }}
+        >
+            <EventInformation id={id} />
+        </Layout>
+    </Layout>
+}
+
+function EventInformation(props: { id: string }) {
+    const { token } = theme.useToken();
+    const user = useUser();
+    const [api, contextHolder] = useAppNotification();
+    const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState("overview");
+    const { data, error, isLoading } = useSWR<ClubEvent, AxiosError>(props.id ? `/events/${props.id}` : null);
+
+    if (isLoading) return <Spin />
+    if (error || !data) {
+        return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: "100%" }}>
+            <Result
+                status="error"
+                title={ error.status == 404 ? "Not Found" : "Error"}
+                subTitle={ error.status === 404 ? "This event could not be found." : "Unable to fetch event."}
+            />
+        </div>
+    }
+
+    const start = dayjs(data.start)
+    const end = dayjs(data.end)
+    const isEventManager = user.role === "admin" || user.role === "exec";
+
+    const toggleArchived = () => {
+        AxiosInstance.patch(`/events/${data.id}/archive`, { archived: !data.archived })
+            .then(async () => {
+                await mutate(`/events/${data.id}`);
+                await mutate((key) => typeof key === "string" && key.startsWith("/events?archived="));
+                api["success"]({
+                    title: "Success",
+                    description: `Event has been ${data.archived ? "unarchived" : "archived"}.`
+                });
+            })
+            .catch((err) => {
+                const message = err?.response?.data?.message
+                    ?? `Event could not be ${data.archived ? "unarchived" : "archived"}.`;
+                api["error"]({ title: "Error", description: message });
+            });
+    }
+
+    const deleteEvent = () => {
+        return AxiosInstance.delete(`/events/${data.id}`)
+            .then(async () => {
+                await mutate((key) => typeof key === "string" && key.startsWith("/events"));
+                navigate("/app/events");
+            })
+            .catch((err) => {
+                const message = err?.response?.data?.message ?? "Event could not be deleted.";
+                api["error"]({ title: "Error", description: message });
+            });
+    }
+
+    const toggleAttendanceOpen = () => {
+        AxiosInstance.patch(`/events/${data.id}/attendance`, { attendanceOpen: !data.attendanceOpen })
+            .then(async () => {
+                await mutate(`/events/${data.id}`);
+                api["success"]({
+                    title: "Success",
+                    description: `Attendance has been ${data.attendanceOpen ? "closed" : "opened"}.`
+                });
+            })
+            .catch((err) => {
+                const message = err?.response?.data?.message
+                    ?? `Attendance could not be ${data.attendanceOpen ? "closed" : "opened"}.`;
+                api["error"]({ title: "Error", description: message });
+            });
+    }
+
+    const items: TabsProps["items"] = [
+        {
+            key: "overview",
+            label: "Overview",
+            children: <OverviewTab />
+        },
+        {
+            key: "tasks",
+            label: "Tasks",
+            children: <TasksTab event={data} />
+        },
+        {
+            key: "budget",
+            label: "Budget",
+            children: <BudgetTab event={data} />
+        },
+        {
+            key: "attendance",
+            label: "Attendance",
+            children: <AttendanceTab event={data} active={activeTab === "attendance"} />
+        },
+        {
+            key: "documents",
+            label: "Documents",
+            children: <DocumentsTab event={data} />
+        }
+    ]
+
+    return <>
+        {contextHolder}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1em" }}>
+            <div style={{ minWidth: 0 }}>
+                <Space align="center" wrap style={{ marginBottom: 8 }}>
+                    <Title level={2} style={{ margin: 0 }}>{data.name}</Title>
+                    { data.archived ? <Tag>Archived</Tag> : "" }
+                </Space>
+                <br />
+                <Text style={{ color: token.colorTextSecondary }}>
+                    { start.isSame(end, "day")
+                        ? <>
+                            <strong>{start.format("D MMM YYYY")}</strong>
+                            {", "}
+                            <strong>{start.format("h:mma")} - {end.format("h:mma")}</strong>
+                        </>
+                        : <>
+                            From <strong>{start.format("dddd D MMMM YYYY [at] h:mm A")}</strong> to
+                            {" "}   <strong>{end.format("dddd D MMMM YYYY [at] h:mm A")}</strong>
+                        </>
+                    }
+                    <span> • {data.location}</span>
+                </Text>
+            </div>
+
+            { isEventManager
+                ? <Space wrap>
+                    <Button
+                        icon={data.attendanceOpen ? <LockOutlined /> : <UnlockOutlined />}
+                        onClick={toggleAttendanceOpen}
+                    >
+                        {data.attendanceOpen ? "Close Attendance" : "Open Attendance"}
+                    </Button>
+                    <Button icon={<InboxOutlined />} onClick={toggleArchived}>
+                        {data.archived ? "Unarchive" : "Archive"}
+                    </Button>
+                    <EventModal key={`${data.name}-${data.start}-${data.end}`} event={data} mode={"duplicate"} />
+                    <EventModal event={data} mode={"update"} />
+                    <Popconfirm
+                        title="Delete event"
+                        description="This permanently deletes the event along with its tasks, budget and attendance. This can't be undone. Archive it instead if you only want it hidden."
+                        onConfirm={deleteEvent}
+                        okText="Delete"
+                        okButtonProps={{ danger: true }}
+                    >
+                        <Button danger icon={<DeleteOutlined />}>Delete</Button>
+                    </Popconfirm>
+                </Space>
+                : ""
+            }
+        </div>
+
+        <Tabs items={items} activeKey={activeTab} onChange={setActiveTab} style={{ paddingTop: "1em" }} />
+    </>
+}
+
