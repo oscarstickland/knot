@@ -2,8 +2,9 @@ import { Hono } from "hono";
 import { isAuthenticated, type UserEnv } from "../services/auth.ts";
 import type { DbEnv } from "../db/connection.ts";
 import { HTTPException } from "hono/http-exception";
-import { CategorySpendingQuerySchema, SetReimbursementSchema, UpdateExpenseSchema } from "../types/budget.ts";
-import { budgetCategoriesTable, expensesTable } from "../db/schema.ts";
+import { describeZodError } from "../types/errors.ts";
+import { CategorySpendingQuerySchema, SetReimbursementSchema, UpdateExpenseSchema, UpdateIncomeSchema } from "../types/budget.ts";
+import { budgetCategoriesTable, expensesTable, incomeTable } from "../db/schema.ts";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { summariseCategorySpending } from "../services/category-spending.ts";
 
@@ -56,18 +57,29 @@ budgetApp.get("/spending", async (c) => {
             .groupBy(expensesTable.eventId)
         : [];
 
+    const incomeTotals = eventIds.length > 0
+        ? await db
+            .select({ eventId: incomeTable.eventId, total: sql<string>`sum(${incomeTable.amount})` })
+            .from(incomeTable)
+            .where(inArray(incomeTable.eventId, eventIds))
+            .groupBy(incomeTable.eventId)
+        : [];
+
     const allocatedByEvent = new Map(allocationTotals.map((row) => [row.eventId, Number(row.total)]));
     const spentByEvent = new Map(expenseTotals.map((row) => [row.eventId, Number(row.total)]));
 
+    const incomeByEvent = new Map(incomeTotals.map((row) => [row.eventId, Number(row.total)]));
+
     const spending = events
-        .filter((event) => allocatedByEvent.has(event.id) || spentByEvent.has(event.id))
+        .filter((event) => allocatedByEvent.has(event.id) || spentByEvent.has(event.id) || incomeByEvent.has(event.id))
         .map((event) => ({
             eventId: event.id,
             name: event.name,
             start: event.start,
             archived: event.archived,
             totalAllocated: allocatedByEvent.get(event.id) ?? 0,
-            totalSpent: spentByEvent.get(event.id) ?? 0
+            totalSpent: spentByEvent.get(event.id) ?? 0,
+            totalIncome: incomeByEvent.get(event.id) ?? 0
         }));
 
     return c.json(spending);
@@ -201,6 +213,55 @@ budgetApp.delete("/expenses/:id{[0-9]+}", async (c) => {
             : and(eq(expensesTable.id, expenseId), isNull(expensesTable.reimbursedAt)))
         .returning({ id: expensesTable.id });
     if (deleted.length === 0) throw new HTTPException(409, { message: "Reimbursed expenses can only be deleted by an exec" });
+
+    return c.json({ message: "Deleted" });
+});
+
+// Income is exec/admin only; entries outside the user's club are reported as 404.
+async function loadClubIncome(db: Db, incomeId: number, user: UserEnv["Variables"]["user"]) {
+    const entry = await db.query.incomeTable.findFirst({
+        where: { id: incomeId },
+        with: { event: true }
+    });
+    if (!entry || !entry.event || entry.event.clubId !== user.club.id) return null;
+    return entry;
+}
+
+budgetApp.put("/income/:id{[0-9]+}", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
+
+    const incomeId = Number(c.req.param("id"));
+    const parsed = UpdateIncomeSchema.safeParse(await c.req.json());
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
+
+    const existing = await loadClubIncome(db, incomeId, user);
+    if (!existing) throw new HTTPException(404, { message: "Income not found" });
+
+    const [income] = await db
+        .update(incomeTable)
+        .set({
+            source: parsed.data.source,
+            amount: parsed.data.amount,
+            description: parsed.data.description || null
+        })
+        .where(eq(incomeTable.id, incomeId))
+        .returning();
+
+    return c.json(income);
+});
+
+budgetApp.delete("/income/:id{[0-9]+}", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
+
+    const incomeId = Number(c.req.param("id"));
+    const existing = await loadClubIncome(db, incomeId, user);
+    if (!existing) throw new HTTPException(404, { message: "Income not found" });
+
+    await db.delete(incomeTable).where(eq(incomeTable.id, incomeId));
 
     return c.json({ message: "Deleted" });
 });

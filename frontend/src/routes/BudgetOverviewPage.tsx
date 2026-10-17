@@ -3,6 +3,7 @@ import useSWR from "swr";
 import dayjs from "dayjs";
 import { Link, useSearchParams } from "react-router";
 import type { EventSpending } from "@knot/backend/budget";
+import { formatCurrency as currency } from "@/lib/currency.ts";
 import { formatCurrency } from "@/lib/categorySpending.ts";
 import { CategorySpendingSection, type DateRange } from "@/components/CategorySpendingSection.tsx";
 
@@ -109,6 +110,12 @@ function SpendingByEvent() {
             title: "Spent",
             sorter: (a, b) => a.totalSpent - b.totalSpent,
             render: (_, event) => formatCurrency(event.totalSpent)
+        },
+        {
+            key: "income",
+            title: "Income",
+            sorter: (a, b) => a.totalIncome - b.totalIncome,
+            render: (_, event) => currency(event.totalIncome)
         },
         {
             key: "progress",

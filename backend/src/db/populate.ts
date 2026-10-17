@@ -7,6 +7,7 @@ import {
     eventDocumentsTable,
     eventsTable,
     expensesTable,
+    incomeTable,
     relations,
     taskAssignmentsTable,
     taskAuditLogTable,
@@ -205,6 +206,23 @@ async function generateData() {
             paidPersonally: true,
             reimbursedAt: new Date(),
             reimbursedBy: insertedUser1!.id
+        }
+    ]);
+
+    console.log("-- Inserting Income");
+    await db.insert(incomeTable).values([
+        {
+            eventId: insertedEvent1!.id,
+            source: "Student union grant",
+            amount: 600,
+            description: "Semester events funding",
+            createdBy: insertedUser1!.id
+        },
+        {
+            eventId: insertedEvent1!.id,
+            source: "Ticket sales",
+            amount: 240,
+            createdBy: insertedUser1!.id
         }
     ]);
 
