@@ -4,6 +4,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import {
     budgetCategoriesTable,
     clubsTable,
+    eventDocumentsTable,
     eventsTable,
     expensesTable,
     incomeTable,
@@ -109,7 +110,7 @@ async function generateData() {
         end: new Date(Date.now() - 9.9 * 24 * 60 * 60 * 1000),
         archived: true
     }
-    await db.insert(eventsTable).values(event3);
+    const [insertedEvent3] = await db.insert(eventsTable).values(event3).returning();
 
     console.log("-- Inserting Tasks");
     const task1: typeof tasksTable.$inferInsert = {
@@ -193,14 +194,18 @@ async function generateData() {
             categoryId: cateringCategory!.id,
             amount: 320,
             description: "Catering for open day",
-            createdBy: insertedUser2!.id
+            createdBy: insertedUser2!.id,
+            paidPersonally: true
         },
         {
             eventId: insertedEvent1!.id,
             categoryId: marketingCategory!.id,
             amount: 60,
             description: "Printed flyers",
-            createdBy: insertedUser2!.id
+            createdBy: insertedUser2!.id,
+            paidPersonally: true,
+            reimbursedAt: new Date(),
+            reimbursedBy: insertedUser1!.id
         }
     ]);
 
@@ -219,6 +224,49 @@ async function generateData() {
             amount: 240,
             createdBy: insertedUser1!.id
         }
+    ]);
+
+    console.log("-- Inserting Event Documents");
+    await db.insert(eventDocumentsTable).values([
+        {
+            eventId: insertedEvent1!.id,
+            title: "Run sheet",
+            url: "https://docs.google.com/document/d/example-run-sheet",
+            addedBy: insertedUser1!.id
+        },
+        {
+            eventId: insertedEvent1!.id,
+            title: "Volunteer roster",
+            url: "https://docs.google.com/spreadsheets/d/example-roster",
+            addedBy: insertedUser2!.id
+        }
+    ]);
+
+    // Other events reuse category names (with different case/whitespace) so the club-wide category view merges them.
+    console.log("-- Inserting Budget Categories for other events");
+    const [hackathonVenue, hackathonCatering, hackathonPrizes] = await db
+        .insert(budgetCategoriesTable)
+        .values([
+            { eventId: insertedEvent2!.id, name: "Venue ", allocatedAmount: 250 },
+            { eventId: insertedEvent2!.id, name: "Catering", allocatedAmount: 600 },
+            { eventId: insertedEvent2!.id, name: "Prizes", allocatedAmount: 400 }
+        ])
+        .returning();
+    const [bbqCatering, bbqEquipment] = await db
+        .insert(budgetCategoriesTable)
+        .values([
+            { eventId: insertedEvent3!.id, name: "catering", allocatedAmount: 200 },
+            { eventId: insertedEvent3!.id, name: "Equipment", allocatedAmount: 80 }
+        ])
+        .returning();
+
+    console.log("-- Inserting Expenses for other events");
+    await db.insert(expensesTable).values([
+        { eventId: insertedEvent2!.id, categoryId: hackathonVenue!.id, amount: 250, description: "Room booking", createdBy: insertedUser1!.id },
+        { eventId: insertedEvent2!.id, categoryId: hackathonCatering!.id, amount: 412.5, description: "Pizza for 60", createdBy: insertedUser2!.id },
+        { eventId: insertedEvent2!.id, categoryId: hackathonPrizes!.id, amount: 300, description: "Gift cards for winners", createdBy: insertedUser1!.id },
+        { eventId: insertedEvent3!.id, categoryId: bbqCatering!.id, amount: 236.4, description: "Sausages and bread", createdBy: insertedUser2!.id },
+        { eventId: insertedEvent3!.id, categoryId: bbqEquipment!.id, amount: 45, description: "Gas bottle refill", createdBy: insertedUser2!.id }
     ]);
 
     await pool.end();

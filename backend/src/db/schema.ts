@@ -118,6 +118,19 @@ export const expensesTable = pgTable("expenses", {
     description: varchar({ length: 500 }).notNull(),
     createdBy: integer("created_by").notNull(),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+    // Set when the creator paid out of pocket and is owed money back by the club.
+    paidPersonally: boolean("paid_personally").default(false).notNull(),
+    reimbursedAt: timestamp("reimbursed_at", { mode: "date", withTimezone: true }),
+    reimbursedBy: integer("reimbursed_by"),
+});
+
+export const eventDocumentsTable = pgTable("event_documents", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    eventId: integer("event_id").notNull(),
+    title: varchar({ length: 255 }).notNull(),
+    url: varchar({ length: 2048 }).notNull(),
+    addedBy: integer("added_by").notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
 });
 
 export const incomeTable = pgTable("income", {
@@ -142,7 +155,8 @@ export const relations = defineRelations({
     eventAttendanceTable,
     budgetCategoriesTable,
     expensesTable,
-    incomeTable
+    incomeTable,
+    eventDocumentsTable
 }, (r) => ({
     usersTable: {
         club: r.one.clubsTable({
@@ -158,7 +172,8 @@ export const relations = defineRelations({
         attendance: r.many.eventAttendanceTable(),
         budgetCategories: r.many.budgetCategoriesTable(),
         expenses: r.many.expensesTable(),
-        income: r.many.incomeTable()
+        income: r.many.incomeTable(),
+        documents: r.many.eventDocumentsTable()
     },
     clubsTable: {
         users: r.many.usersTable(),
@@ -259,6 +274,16 @@ export const relations = defineRelations({
         }),
         creator: r.one.usersTable({
             from: r.incomeTable.createdBy,
+            to: r.usersTable.id
+        })
+    },
+    eventDocumentsTable: {
+        event: r.one.eventsTable({
+            from: r.eventDocumentsTable.eventId,
+            to: r.eventsTable.id
+        }),
+        addedByUser: r.one.usersTable({
+            from: r.eventDocumentsTable.addedBy,
             to: r.usersTable.id
         })
     }

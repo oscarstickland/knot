@@ -7,6 +7,7 @@ import { EventBudgetModal } from "@/components/EventBudgetModal.tsx";
 import { ExpenseModal } from "@/components/ExpenseModal.tsx";
 import { IncomeModal } from "@/components/IncomeModal.tsx";
 import { formatCurrency as currency, netPosition } from "@/lib/currency.ts";
+import { ReimbursementControl } from "@/components/ReimbursementControl.tsx";
 
 const { Text } = Typography;
 
@@ -26,6 +27,7 @@ export function BudgetSection(props: { eventId: number }) {
     const expenses = data?.expenses ?? [];
     const totalAllocated = summary?.totalAllocated ?? 0;
     const totalSpent = summary?.totalSpent ?? 0;
+    const totalOwed = summary?.totalOwed ?? 0;
     const remaining = totalAllocated - totalSpent;
     const income = summary?.income ?? [];
     const totalIncome = summary?.totalIncome ?? 0;
@@ -87,6 +89,13 @@ export function BudgetSection(props: { eventId: number }) {
             title: "Added By",
             render: (_: unknown, expense: ExpenseWithRelations) => expense.creator.name
         }] : []),
+        {
+            key: "reimbursement",
+            title: "Reimbursement",
+            render: (_, expense) => (
+                <ReimbursementControl eventId={props.eventId} expense={expense} canManage={isBudgetManager} />
+            )
+        },
         {
             key: "actions",
             title: "",
@@ -161,6 +170,13 @@ export function BudgetSection(props: { eventId: number }) {
                 precision={2}
                 prefix="$"
                 valueStyle={{ color: net < 0 ? token.colorError : token.colorSuccess }}
+            />
+            <Statistic
+                title="Owed to Members"
+                value={totalOwed}
+                precision={2}
+                prefix="$"
+                valueStyle={{ color: totalOwed > 0 ? token.colorWarning : undefined }}
             />
             <Statistic
                 title="Remaining"

@@ -3,9 +3,10 @@ import { isAuthenticated, type UserEnv } from "../services/auth.ts";
 import type { DbEnv } from "../db/connection.ts";
 import { HTTPException } from "hono/http-exception";
 import { describeZodError } from "../types/errors.ts";
-import { UpdateExpenseSchema, UpdateIncomeSchema } from "../types/budget.ts";
+import { CategorySpendingQuerySchema, SetReimbursementSchema, UpdateExpenseSchema, UpdateIncomeSchema } from "../types/budget.ts";
 import { budgetCategoriesTable, expensesTable, incomeTable } from "../db/schema.ts";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { summariseCategorySpending } from "../services/category-spending.ts";
 
 type Db = DbEnv["Variables"]["db"];
 
@@ -84,6 +85,45 @@ budgetApp.get("/spending", async (c) => {
     return c.json(spending);
 });
 
+budgetApp.get("/categories", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can view category spending" });
+
+    const parsed = CategorySpendingQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) throw new HTTPException(400, { message: "Invalid date range" });
+    const { from, to } = parsed.data;
+
+    const events = await db.query.eventsTable.findMany({
+        where: {
+            clubId: user.club.id,
+            ...((from || to) && { start: { ...(from && { gte: from }), ...(to && { lte: to }) } })
+        },
+        orderBy: { start: "desc" }
+    });
+    const eventIds = events.map((event) => event.id);
+    if (eventIds.length === 0) return c.json(summariseCategorySpending([], [], []));
+
+    // Same name on different events is the same category club-wide.
+    const categoryKey = sql<string>`lower(trim(${budgetCategoriesTable.name}))`;
+    const categoryName = sql<string>`min(trim(${budgetCategoriesTable.name}))`;
+
+    const allocationRows = await db
+        .select({ key: categoryKey, name: categoryName, eventId: budgetCategoriesTable.eventId, total: sql<string>`sum(${budgetCategoriesTable.allocatedAmount})` })
+        .from(budgetCategoriesTable)
+        .where(inArray(budgetCategoriesTable.eventId, eventIds))
+        .groupBy(categoryKey, budgetCategoriesTable.eventId);
+
+    const spendRows = await db
+        .select({ key: categoryKey, name: categoryName, eventId: expensesTable.eventId, total: sql<string>`sum(${expensesTable.amount})` })
+        .from(expensesTable)
+        .innerJoin(budgetCategoriesTable, eq(expensesTable.categoryId, budgetCategoriesTable.id))
+        .where(inArray(expensesTable.eventId, eventIds))
+        .groupBy(categoryKey, expensesTable.eventId);
+
+    return c.json(summariseCategorySpending(events, allocationRows, spendRows));
+});
+
 budgetApp.put("/expenses/:id{[0-9]+}", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
@@ -95,6 +135,10 @@ budgetApp.put("/expenses/:id{[0-9]+}", async (c) => {
 
     const existingExpense = await loadManageableExpense(db, expenseId, user);
     if (!existingExpense) throw new HTTPException(404, { message: "Expense not found" });
+    // Stops a member un-flagging and re-flagging a reimbursed expense to get paid twice
+    if (existingExpense.reimbursedAt && !isExecOrAdmin(user.role)) {
+        throw new HTTPException(409, { message: "Reimbursed expenses can only be changed by an exec" });
+    }
 
     const category = await db.query.budgetCategoriesTable.findFirst({
         where: { id: parsed.data.categoryId, eventId: existingExpense.eventId }
@@ -106,8 +150,44 @@ budgetApp.put("/expenses/:id{[0-9]+}", async (c) => {
         .set({
             categoryId: parsed.data.categoryId,
             amount: parsed.data.amount,
-            description: parsed.data.description
+            description: parsed.data.description,
+            paidPersonally: parsed.data.paidPersonally,
+            // Un-flagging a personal payment, or changing what was paid, voids any recorded reimbursement
+            ...(!parsed.data.paidPersonally || parsed.data.amount !== existingExpense.amount
+                ? { reimbursedAt: null, reimbursedBy: null }
+                : {})
         })
+        // Re-checked in the UPDATE itself so a reimbursement recorded since the read above can't be wiped
+        .where(isExecOrAdmin(user.role)
+            ? eq(expensesTable.id, expenseId)
+            : and(eq(expensesTable.id, expenseId), isNull(expensesTable.reimbursedAt)))
+        .returning();
+    if (!expense) throw new HTTPException(409, { message: "Reimbursed expenses can only be changed by an exec" });
+
+    return c.json(expense);
+});
+
+// Execs and admins mark a personally paid expense as reimbursed (or undo that).
+budgetApp.patch("/expenses/:id{[0-9]+}/reimbursement", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403);
+
+    const expenseId = Number(c.req.param("id"));
+    const parsed = SetReimbursementSchema.safeParse(await c.req.json());
+    if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
+
+    const existingExpense = await loadManageableExpense(db, expenseId, user);
+    if (!existingExpense) throw new HTTPException(404, { message: "Expense not found" });
+    if (!existingExpense.paidPersonally) {
+        throw new HTTPException(400, { message: "Expense was not paid personally" });
+    }
+
+    const [expense] = await db
+        .update(expensesTable)
+        .set(parsed.data.reimbursed
+            ? { reimbursedAt: new Date(), reimbursedBy: user.id }
+            : { reimbursedAt: null, reimbursedBy: null })
         .where(eq(expensesTable.id, expenseId))
         .returning();
 
@@ -121,8 +201,18 @@ budgetApp.delete("/expenses/:id{[0-9]+}", async (c) => {
     const expenseId = Number(c.req.param("id"));
     const existingExpense = await loadManageableExpense(db, expenseId, user);
     if (!existingExpense) throw new HTTPException(404, { message: "Expense not found" });
+    if (existingExpense.reimbursedAt && !isExecOrAdmin(user.role)) {
+        throw new HTTPException(409, { message: "Reimbursed expenses can only be deleted by an exec" });
+    }
 
-    await db.delete(expensesTable).where(eq(expensesTable.id, expenseId));
+    // Re-checked in the DELETE itself so a reimbursement recorded since the read above can't be erased
+    const deleted = await db
+        .delete(expensesTable)
+        .where(isExecOrAdmin(user.role)
+            ? eq(expensesTable.id, expenseId)
+            : and(eq(expensesTable.id, expenseId), isNull(expensesTable.reimbursedAt)))
+        .returning({ id: expensesTable.id });
+    if (deleted.length === 0) throw new HTTPException(409, { message: "Reimbursed expenses can only be deleted by an exec" });
 
     return c.json({ message: "Deleted" });
 });

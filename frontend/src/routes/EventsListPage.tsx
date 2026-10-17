@@ -7,7 +7,7 @@ import {Link} from "react-router";
 import {EventModal} from "@/components/EventModal.tsx";
 import {useState} from "react";
 import dayjs from "dayjs";
-import {MoreOutlined} from "@ant-design/icons";
+import {CopyOutlined, EditOutlined, MoreOutlined} from "@ant-design/icons";
 
 const { Text, Title } = Typography;
 
@@ -88,6 +88,7 @@ function EventsTable(props: { filter: "all" | "active" | "archived"; search: str
     const { data, isLoading, error } = useSWR<ClubEvent[]>(`/events?archived=${archivedParam}`);
 
     const [editingEvent, setEditingEvent] = useState<ClubEvent | null>(null);
+    const [duplicatingEvent, setDuplicatingEvent] = useState<ClubEvent | null>(null);
 
     const columns: TableProps<EventsTable>['columns'] = [
         {
@@ -118,9 +119,13 @@ function EventsTable(props: { filter: "all" | "active" | "archived"; search: str
                 <Dropdown
                     trigger={["click"]}
                     menu={{
-                        items: [{ key: "edit", label: "Edit" }],
+                        items: [
+                            { key: "edit", label: "Edit", icon: <EditOutlined /> },
+                            { key: "duplicate", label: "Duplicate", icon: <CopyOutlined /> }
+                        ],
                         onClick: ({ key }) => {
                             if (key === "edit") setEditingEvent(row.event);
+                            if (key === "duplicate") setDuplicatingEvent(row.event);
                         }
                     }}
                 >
@@ -160,6 +165,14 @@ function EventsTable(props: { filter: "all" | "active" | "archived"; search: str
                 event={editingEvent}
                 open={true}
                 onOpenChange={(open) => { if (!open) setEditingEvent(null); }}
+            />
+        }
+        { duplicatingEvent &&
+            <EventModal
+                mode="duplicate"
+                event={duplicatingEvent}
+                open={true}
+                onOpenChange={(open) => { if (!open) setDuplicatingEvent(null); }}
             />
         }
     </>

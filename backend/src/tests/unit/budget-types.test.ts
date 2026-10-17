@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { CreateIncomeSchema, SetEventBudgetSchema } from "../../types/budget.ts";
+import { CategorySpendingQuerySchema, CreateExpenseSchema, CreateIncomeSchema, SetEventBudgetSchema, SetReimbursementSchema } from "../../types/budget.ts";
 
 describe("SetEventBudgetSchema", () => {
     it("accepts a mix of new and existing categories", () => {
@@ -75,5 +75,59 @@ describe("CreateIncomeSchema", () => {
         ["a description over 500 characters", { source: "Sponsor", amount: 1, description: "a".repeat(501) }]
     ])("rejects %s", (_label, payload) => {
         expect(CreateIncomeSchema.safeParse(payload).success).toBe(false);
+    });
+});
+
+describe("CreateExpenseSchema", () => {
+    const base = { categoryId: 1, amount: 10, description: "Snacks" };
+
+    it("defaults paidPersonally to false", () => {
+        expect(CreateExpenseSchema.parse(base).paidPersonally).toBe(false);
+    });
+
+    it("accepts paidPersonally true", () => {
+        expect(CreateExpenseSchema.parse({ ...base, paidPersonally: true }).paidPersonally).toBe(true);
+    });
+
+    it("rejects a non-boolean paidPersonally", () => {
+        expect(CreateExpenseSchema.safeParse({ ...base, paidPersonally: "yes" }).success).toBe(false);
+    });
+});
+
+describe("SetReimbursementSchema", () => {
+    it("accepts a boolean", () => {
+        expect(SetReimbursementSchema.safeParse({ reimbursed: true }).success).toBe(true);
+    });
+
+    it("rejects a missing flag", () => {
+        expect(SetReimbursementSchema.safeParse({}).success).toBe(false);
+    });
+});
+
+describe("CategorySpendingQuerySchema", () => {
+    it("accepts an empty query", () => {
+        const parsed = CategorySpendingQuerySchema.safeParse({});
+        expect(parsed.success).toBe(true);
+    });
+
+    it("coerces ISO strings into dates", () => {
+        const parsed = CategorySpendingQuerySchema.parse({ from: "2026-01-01T00:00:00.000Z", to: "2026-12-31T00:00:00.000Z" });
+        expect(parsed.from).toBeInstanceOf(Date);
+        expect(parsed.to?.toISOString()).toBe("2026-12-31T00:00:00.000Z");
+    });
+
+    it("accepts a range where from equals to", () => {
+        const parsed = CategorySpendingQuerySchema.safeParse({ from: "2026-01-01", to: "2026-01-01" });
+        expect(parsed.success).toBe(true);
+    });
+
+    it("rejects a range where from is after to", () => {
+        const parsed = CategorySpendingQuerySchema.safeParse({ from: "2026-02-01", to: "2026-01-01" });
+        expect(parsed.success).toBe(false);
+    });
+
+    it("rejects a date that cannot be parsed", () => {
+        const parsed = CategorySpendingQuerySchema.safeParse({ from: "not-a-date" });
+        expect(parsed.success).toBe(false);
     });
 });

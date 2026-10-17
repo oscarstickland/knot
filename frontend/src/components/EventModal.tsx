@@ -1,23 +1,48 @@
-import {type ClubEvent, type UpdateEventData, UpdateEventSchema} from "@knot/backend/events";
+import {type ClubEvent, DuplicateEventSchema, type UpdateEventData, UpdateEventSchema} from "@knot/backend/events";
 import {useState} from "react";
-import {Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, notification, theme} from "antd";
-import {Controller, useForm} from "react-hook-form";
+import {Button, DatePicker, Drawer, Form, Input, InputNumber, Switch, theme, Typography} from "antd";
+import {Controller, type Control, type Resolver, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {AxiosInstance} from "@/lib/fetcher.tsx";
 import {mutate} from "swr";
 import dayjs from "dayjs";
-import {EditOutlined, PlusOutlined} from "@ant-design/icons";
+import {CopyOutlined, EditOutlined, PlusOutlined} from "@ant-design/icons";
 import {z} from "zod";
 import { useAppNotification } from "@/lib/useAppNotification";
+import { suggestDuplicateDefaults } from "@/lib/duplicateEvent";
 
-type UpdateEventInput = z.input<typeof UpdateEventSchema>;
-type UpdateEventOutput = z.output<typeof UpdateEventSchema>;
+type EventFormInput = z.input<typeof DuplicateEventSchema>;
+type EventFormOutput = z.output<typeof DuplicateEventSchema>;
 
 type EventFormModalProps =
     | { mode: "create"; event?: never; open?: boolean; onOpenChange?: (open: boolean) => void }
-    | { mode: "update"; event: ClubEvent; open?: boolean; onOpenChange?: (open: boolean) => void };
+    | { mode: "update"; event: ClubEvent; open?: boolean; onOpenChange?: (open: boolean) => void }
+    | { mode: "duplicate"; event: ClubEvent; open?: boolean; onOpenChange?: (open: boolean) => void };
 
-export function EventModal({ mode, event, open: openProp, onOpenChange }: EventFormModalProps) {
+const MODE_COPY = {
+    create: { title: "Create Event", done: "created", button: "New Event", icon: <PlusOutlined /> },
+    update: { title: "Edit Event", done: "updated", button: "Edit Event", icon: <EditOutlined /> },
+    duplicate: { title: "Duplicate Event", done: "duplicated", button: "Duplicate", icon: <CopyOutlined /> }
+} as const;
+
+function defaultValuesFor(props: EventFormModalProps): EventFormInput {
+    if (props.mode === "create") {
+        return { name: "", location: "", start: undefined as unknown as string, end: undefined as unknown as string, expectedAttendees: "", includeTasks: false, includeBudget: false };
+    }
+    const { event } = props;
+    const base = {
+        location: event.location,
+        expectedAttendees: event.expectedAttendees ?? "",
+        includeTasks: false,
+        includeBudget: false
+    };
+    return props.mode === "update"
+        ? { ...base, name: event.name, start: new Date(event.start).toISOString(), end: new Date(event.end).toISOString() }
+        : { ...base, ...suggestDuplicateDefaults(event) };
+}
+
+export function EventModal(props: EventFormModalProps) {
+    const { mode, event, open: openProp, onOpenChange } = props;
     const isControlled = openProp !== undefined;
     const [ internalOpen, setInternalOpen ] = useState(false);
     const open = isControlled ? openProp : internalOpen;
@@ -25,28 +50,27 @@ export function EventModal({ mode, event, open: openProp, onOpenChange }: EventF
     const [ api, contextHolder ] = useAppNotification();
     const { token } = theme.useToken();
     const isEditMode = mode === "update";
+    const isDuplicateMode = mode === "duplicate";
+    const copy = MODE_COPY[mode];
     const labelStyle = { fontWeight: token.fontWeightStrong };
 
-    const { handleSubmit, formState: { errors }, control, reset } = useForm<UpdateEventInput, any, UpdateEventOutput>({
-        resolver: zodResolver(UpdateEventSchema),
-        defaultValues: isEditMode ? {
-            name: event.name,
-            location: event.location,
-            start: event.start ? new Date(event.start).toISOString() : undefined,
-            end: event.end ? new Date(event.end).toISOString() : undefined,
-            expectedAttendees: event.expectedAttendees ?? "",
-        } : { name: "", location: "", start: undefined, end: undefined, expectedAttendees: "" },
+    const { handleSubmit, formState: { errors }, control, reset } = useForm<EventFormInput, any, EventFormOutput>({
+        resolver: zodResolver(isDuplicateMode ? DuplicateEventSchema : UpdateEventSchema) as Resolver<EventFormInput, any, EventFormOutput>,
+        defaultValues: defaultValuesFor(props),
     });
 
     const handleCancel = () => {
         setOpen(false);
-        reset();
+        reset(defaultValuesFor(props));
     }
 
-    const submit = (data: UpdateEventData) => {
+    const submit = (data: EventFormOutput) => {
+        const { includeTasks, includeBudget, ...details }: UpdateEventData & Pick<EventFormOutput, "includeTasks" | "includeBudget"> = data;
         const request = isEditMode
-            ? AxiosInstance.put(`/events/${event.id}`, data)
-            : AxiosInstance.post(`/events`, data);
+            ? AxiosInstance.put(`/events/${event.id}`, details)
+            : isDuplicateMode
+                ? AxiosInstance.post(`/events/${event.id}/duplicate`, { ...details, includeTasks, includeBudget })
+                : AxiosInstance.post(`/events`, details);
 
         request.then(async (response) => {
             if (response.status === 200 || response.status === 201) {
@@ -58,17 +82,17 @@ export function EventModal({ mode, event, open: openProp, onOpenChange }: EventF
                 await mutate((key) => typeof key === "string" && key.startsWith("/events"));
                 setOpen(false);
 
-                if (!isEditMode) reset();
+                if (mode === "create") reset();
 
                 api['success']({
                     title: "Success",
-                    description: `Event has been ${isEditMode ? "updated" : "created"}.`
+                    description: `Event has been ${copy.done}.`
                 });
             }
         })
         .catch((err) => {
             const message = err?.response?.data?.message
-                ?? `Event could not be ${isEditMode ? "updated" : "created"}.`;
+                ?? `Event could not be ${copy.done}.`;
             api['error']({ title: "Error", description: message });
         })
     }
@@ -78,7 +102,7 @@ export function EventModal({ mode, event, open: openProp, onOpenChange }: EventF
         <Drawer
             open={open}
             onClose={handleCancel}
-            title={`${isEditMode ? "Edit" : "Create"} Event`}
+            title={copy.title}
             width={420}
             footer={
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
@@ -179,13 +203,58 @@ export function EventModal({ mode, event, open: openProp, onOpenChange }: EventF
                         )}
                     />
                 </Form.Item>
+
+                { isDuplicateMode &&
+                    <DuplicateContents
+                        control={control}
+                        sourceName={event.name}
+                    />
+                }
             </form>
         </Drawer>
         { !isControlled &&
             <Button
                 onClick={() => setOpen(!open)}
-                icon={isEditMode ? <EditOutlined /> : <PlusOutlined />}
-            >{isEditMode ? "Edit Event" : "New Event"}</Button>
+                icon={copy.icon}
+            >{copy.button}</Button>
         }
     </>
+}
+
+const CONTENT_OPTIONS = [
+    { name: "includeTasks", label: "Tasks", hint: "Copied back to backlog, with due dates moved to match. Assignees are not copied." },
+    { name: "includeBudget", label: "Budget categories", hint: "Categories and their allocations. Expenses are not copied." }
+] as const;
+
+function DuplicateContents({ control, sourceName }: { control: Control<EventFormInput, any, EventFormOutput>; sourceName: string }) {
+    const { token } = theme.useToken();
+
+    return <fieldset style={{
+        margin: 0,
+        padding: token.paddingMD,
+        border: `1px dashed ${token.colorBorder}`,
+        borderRadius: token.borderRadiusLG,
+        background: token.colorFillQuaternary
+    }}>
+        <legend style={{ padding: `0 ${token.paddingXS}px`, fontWeight: token.fontWeightStrong, fontSize: token.fontSize }}>
+            Bring over from "{sourceName}"
+        </legend>
+        { CONTENT_OPTIONS.map((option) =>
+            <Controller
+                key={option.name}
+                name={option.name}
+                control={control}
+                render={({ field }) => (
+                    <label style={{ display: "flex", gap: token.marginSM, alignItems: "flex-start", padding: `${token.paddingXS}px 0`, cursor: "pointer" }}>
+                        <Switch size="small" checked={!!field.value} onChange={field.onChange} style={{ marginTop: 4 }} />
+                        <span>
+                            <Typography.Text strong>{option.label}</Typography.Text>
+                            <br />
+                            <Typography.Text type="secondary">{option.hint}</Typography.Text>
+                        </span>
+                    </label>
+                )}
+            />
+        )}
+    </fieldset>
 }
