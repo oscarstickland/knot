@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Button, Form, Input, InputNumber, Modal, Popconfirm, Select } from "antd";
+import { Button, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Select } from "antd";
 import { Controller, useForm } from "react-hook-form";
+import type { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
 import useSWR, { mutate } from "swr";
@@ -9,6 +10,8 @@ import { CreateExpenseSchema, type CreateExpenseData, type EventBudgetView, type
 import { useAppNotification } from "@/lib/useAppNotification";
 
 const { TextArea } = Input;
+
+type ExpenseFormInput = z.input<typeof CreateExpenseSchema>;
 
 type ExpenseModalProps =
     | { mode: "create"; eventId: number; expense?: never }
@@ -22,16 +25,18 @@ export function ExpenseModal({ mode, eventId, expense }: ExpenseModalProps) {
     const { data: budget } = useSWR<EventBudgetView>(`/events/${eventId}/budget`);
     const categories = budget?.categories ?? [];
 
-    const { handleSubmit, formState: { errors }, control, reset } = useForm<CreateExpenseData>({
+    const { handleSubmit, formState: { errors }, control, reset } = useForm<ExpenseFormInput, unknown, CreateExpenseData>({
         resolver: zodResolver(CreateExpenseSchema),
         defaultValues: isEditMode ? {
             categoryId: expense.categoryId,
             amount: expense.amount,
-            description: expense.description
+            description: expense.description,
+            paidPersonally: expense.paidPersonally
         } : {
             categoryId: undefined,
             amount: undefined,
-            description: ""
+            description: "",
+            paidPersonally: false
         }
     });
 
@@ -155,6 +160,20 @@ export function ExpenseModal({ mode, eventId, expense }: ExpenseModalProps) {
                         name="description"
                         control={control}
                         render={({ field }) => <TextArea {...field} rows={3} placeholder="What was this for?" />}
+                    />
+                </Form.Item>
+
+                <Form.Item
+                    help="Tick this if you covered the cost yourself, so the committee knows to pay you back."
+                >
+                    <Controller
+                        name="paidPersonally"
+                        control={control}
+                        render={({ field: { value, onChange, ref } }) => (
+                            <Checkbox ref={ref} checked={value} onChange={(e) => onChange(e.target.checked)}>
+                                I paid for this personally and need to be reimbursed
+                            </Checkbox>
+                        )}
                     />
                 </Form.Item>
             </form>

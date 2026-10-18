@@ -5,7 +5,6 @@ import {
     Empty,
     Result,
     Select,
-    Space,
     Table,
     Tag,
     Tooltip,
@@ -20,22 +19,32 @@ import { useUser } from "@/lib/auth.tsx";
 import { TaskDrawer } from "@/components/TaskDrawer.tsx";
 import dayjs from "dayjs";
 import { CommentOutlined, UserOutlined } from "@ant-design/icons";
-import { priorityColor, progressColor, progressLabel } from "@/components/TaskStatusPill.tsx";
+import { priorityColor, ProgressTag, progressLabel } from "@/components/TaskStatusPill.tsx";
+import { completedRowStyle, isTaskCompleted } from "@/lib/taskCompletion.ts";
 import { useAppNotification } from "@/lib/useAppNotification";
+import { summariseDependencies } from "@/lib/taskDependencies.ts";
+import { DependencyCount, LinkedTaskTags } from "@/components/TaskDependencyIndicator.tsx";
 
 const { Text } = Typography;
 
-const progressOptions = taskProgressStates.map((progress) => ({
+// Completion is locked while prerequisites are outstanding, mirroring the server rule.
+const progressOptions = (isWaiting: boolean) => taskProgressStates.map((progress) => ({
     label: progressLabel(progress),
-    value: progress
+    value: progress,
+    disabled: isWaiting && progress === "completed"
 }));
+
+function waitingOnMessage(task: TaskWithRelations): string | null {
+    const { waitingOn } = summariseDependencies(task);
+    if (waitingOn.length === 0) return null;
+    return `Finish ${waitingOn.map((linked) => linked.title).join(", ")} before completing this task`;
+}
 
 export function TasksSection(props: { eventId: number }) {
     const { token } = theme.useToken();
     const user = useUser();
     const isTaskManager = user.role === "admin" || user.role === "exec";
     const { data: tasks, isLoading, error } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${props.eventId}`);
-    const taskById = new Map((tasks ?? []).map((task) => [task.id, task]));
     const [openTaskId, setOpenTaskId] = useState<number | null>(null);
 
     if (error) {
@@ -62,12 +71,13 @@ export function TasksSection(props: { eventId: number }) {
             locale={{ emptyText: <Empty description="No tasks yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
             onRow={(task) => ({
                 onClick: () => setOpenTaskId(task.id),
-                style: { cursor: "pointer" }
+                style: { cursor: "pointer", ...completedRowStyle(task, token).row }
             })}
             columns={[
                 {
                     key: "complete",
                     width: 36,
+                    onCell: (task) => ({ style: completedRowStyle(task, token).firstCell }),
                     render: (_, task) => (
                         <div onClick={(e) => e.stopPropagation()}>
                             <CompleteCheckbox task={task} eventId={props.eventId} isTaskManager={isTaskManager} />
@@ -109,21 +119,18 @@ export function TasksSection(props: { eventId: number }) {
                     )
                 },
                 {
+                    key: "dependencyCount",
+                    title: "Dependencies",
+                    width: 130,
+                    responsive: ["md"],
+                    render: (_, task) => <DependencyCount task={task} />
+                },
+                {
                     key: "dependsOn",
                     title: "Depends On",
                     width: 160,
                     responsive: ["xl"],
-                    render: (_, task) => task.dependsOn.length === 0
-                        ? <Text type="secondary">—</Text>
-                        : <Space size={[4, 4]} wrap>
-                            {task.dependsOn.map((dependency) => {
-                                const dependencyTask = taskById.get(dependency.dependsOnTaskId);
-                                const isBlocked = dependencyTask?.progress !== "completed";
-                                return <Tag key={dependency.dependsOnTaskId} color={isBlocked ? "red" : "green"}>
-                                    {dependencyTask?.title ?? `Task ${dependency.dependsOnTaskId}`}
-                                </Tag>
-                            })}
-                        </Space>
+                    render: (_, task) => <LinkedTaskTags tasks={summariseDependencies(task).prerequisites} emptyText="—" />
                 },
                 {
                     key: "assignees",
@@ -188,14 +195,18 @@ function useTaskProgress(task: TaskWithRelations, eventId: number) {
 function CompleteCheckbox(props: { task: TaskWithRelations; eventId: number; isTaskManager: boolean }) {
     const { isAssigned, updateProgress, contextHolder } = useTaskProgress(props.task, props.eventId);
     const canEdit = props.isTaskManager || isAssigned;
+    const waitingMessage = waitingOnMessage(props.task);
 
     return <>
         {contextHolder}
-        <Checkbox
-            disabled={!canEdit}
-            checked={props.task.progress === "completed"}
-            onChange={(e) => updateProgress(e.target.checked ? "completed" : "in_progress")}
-        />
+        <Tooltip title={canEdit ? waitingMessage : null}>
+            <Checkbox
+                disabled={!canEdit || waitingMessage !== null}
+                checked={props.task.progress === "completed"}
+                onChange={(e) => updateProgress(e.target.checked ? "completed" : "in_progress")}
+                aria-label={waitingMessage ?? `Mark ${props.task.title} as complete`}
+            />
+        </Tooltip>
     </>
 }
 
@@ -205,7 +216,7 @@ function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTas
 
     if (!canEdit) return <>
         {contextHolder}
-        <Tag color={progressColor[props.task.progress]}>{progressLabel(props.task.progress)}</Tag>
+        <ProgressTag progress={props.task.progress} />
     </>
 
     return <>
@@ -213,7 +224,7 @@ function ProgressSelect(props: { task: TaskWithRelations; eventId: number; isTas
         <Select
             size="small"
             value={props.task.progress}
-            options={progressOptions}
+            options={progressOptions(waitingOnMessage(props.task) !== null)}
             style={{ width: "100%" }}
             onChange={updateProgress}
         />

@@ -16,8 +16,9 @@ import { EditOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
 import { z } from "zod";
 import { useAppNotification } from "@/lib/useAppNotification";
 import { priorityColor, TaskStatusPill } from "@/components/TaskStatusPill.tsx";
-import { buildDependencyOptions } from "@/lib/taskDependencies.ts";
 import { TaskComments } from "@/components/TaskComments.tsx";
+import { buildDependencyOptions, summariseDependencies } from "@/lib/taskDependencies.ts";
+import { DependencyCount, LinkedTaskTags, TaskDependencyIndicator } from "@/components/TaskDependencyIndicator.tsx";
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -57,7 +58,6 @@ export function TaskDrawer(props: TaskDrawerProps) {
 
     const { data: members } = useSWR<ClubMember[]>(canManage ? "/user" : null);
     const { data: eventTasks } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${eventId}`);
-    const taskById = new Map((eventTasks ?? []).map((candidate) => [candidate.id, candidate]));
     const dependencyOptions = buildDependencyOptions(eventTasks ?? [], task?.id);
 
     const defaultValues = isEditMode ? {
@@ -146,7 +146,7 @@ export function TaskDrawer(props: TaskDrawerProps) {
             }
         >
             {view === "summary" && task
-                ? <TaskSummary task={task} taskById={taskById} />
+                ? <TaskSummary task={task} />
                 : <form onSubmit={handleSubmit(submit)}>
                     <Form.Item
                         label="Title"
@@ -243,16 +243,15 @@ export function TaskDrawer(props: TaskDrawerProps) {
     </>
 }
 
-function TaskSummary(props: {
-    task: TaskWithRelations;
-    taskById: Map<number, TaskWithRelations>;
-}) {
-    const { task, taskById } = props;
+function TaskSummary(props: { task: TaskWithRelations }) {
+    const { task } = props;
+    const dependencies = summariseDependencies(task);
 
     return <Space direction="vertical" size="large" style={{ width: "100%" }}>
         <Space wrap>
             <Tag color={priorityColor[task.priority]}>{task.priority.toUpperCase()}</Tag>
             <TaskStatusPill task={task} />
+            <TaskDependencyIndicator task={task} />
         </Space>
 
         <div>
@@ -289,17 +288,15 @@ function TaskSummary(props: {
         <div>
             <Text type="secondary" style={{ fontSize: "12px" }}>Depends On</Text>
             <div style={{ marginTop: "4px" }}>
-                {task.dependsOn.length === 0
-                    ? <Text type="secondary">No dependencies</Text>
-                    : <Space size={[4, 4]} wrap>
-                        {task.dependsOn.map((dependency) => {
-                            const dependencyTask = taskById.get(dependency.dependsOnTaskId);
-                            return <Tag key={dependency.dependsOnTaskId} color={dependencyTask?.progress === "completed" ? "green" : "default"}>
-                                {dependencyTask?.title ?? `Task ${dependency.dependsOnTaskId}`}
-                            </Tag>
-                        })}
-                    </Space>
-                }
+                <div style={{ marginBottom: "4px" }}><DependencyCount task={task} /></div>
+                <LinkedTaskTags tasks={dependencies.prerequisites} emptyText="No dependencies" />
+            </div>
+        </div>
+
+        <div>
+            <Text type="secondary" style={{ fontSize: "12px" }}>Required By</Text>
+            <div style={{ marginTop: "4px" }}>
+                <LinkedTaskTags tasks={dependencies.dependents} emptyText="No tasks depend on this" />
             </div>
         </div>
 
