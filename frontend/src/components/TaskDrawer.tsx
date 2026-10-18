@@ -16,6 +16,7 @@ import { EditOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
 import { z } from "zod";
 import { useAppNotification } from "@/lib/useAppNotification";
 import { priorityColor, TaskStatusPill } from "@/components/TaskStatusPill.tsx";
+import { TaskComments } from "@/components/TaskComments.tsx";
 import { buildDependencyOptions, summariseDependencies } from "@/lib/taskDependencies.ts";
 import { DependencyCount, LinkedTaskTags, TaskDependencyIndicator } from "@/components/TaskDependencyIndicator.tsx";
 
@@ -298,5 +299,7 @@ function TaskSummary(props: { task: TaskWithRelations }) {
                 <LinkedTaskTags tasks={dependencies.dependents} emptyText="No tasks depend on this" />
             </div>
         </div>
+
+        <TaskComments taskId={task.id} eventId={task.eventId} />
     </Space>
 }
