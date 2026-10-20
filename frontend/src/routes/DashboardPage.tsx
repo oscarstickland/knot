@@ -136,7 +136,10 @@ function UpcomingTaskList(props: { tasks: TaskWithRelations[] }) {
 
 function UpcomingEvents() {
     const events = useSWR<ClubEventWithTaskProgress[]>(`/events?archived=false`);
-    const dataVisible = events.data && events.data.length > 0;
+    // Only show events that haven't finished yet (future or currently going)
+    const now = dayjs();
+    const upcoming = events.data?.filter(event => !dayjs(event.end).isBefore(now));
+    const dataVisible = upcoming && upcoming.length > 0;
 
     const EmptyEvents = () => {
         return <div style={{ display: 'flex', alignItems: "center", justifyContent: "center", height: "100%" }}>
@@ -150,8 +153,8 @@ function UpcomingEvents() {
         extra={<Link to={"/app/events"}>All events</Link>}
         styles={{ body: { padding: dataVisible ? "0" : undefined } }}
     >
-        {events.data && events.data.length === 0 ? <EmptyEvents /> : null}
-        {events.data && events.data.length > 0 ? <UpcomingEventsList events={events.data} /> : null}
+        {upcoming && upcoming.length === 0 ? <EmptyEvents /> : null}
+        {upcoming && upcoming.length > 0 ? <UpcomingEventsList events={upcoming} /> : null}
     </Card>
 }
 
