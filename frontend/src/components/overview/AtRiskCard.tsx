@@ -57,7 +57,7 @@ export function AtRiskCard({ tasks, totalCount, now, onOpenTasks }: AtRiskCardPr
         </Button>}
         styles={{ body: { padding: 0 } }}
     >
-        <ConfigProvider theme={{ components: { Table: { headerBorderRadius: 0 } } }}>
+        <ConfigProvider theme={{ components: { Table: { headerBorderRadius: 0, cellPaddingInlineMD: token.paddingLG, cellPaddingBlockMD: token.paddingSM } } }}>
             <Table
                 rowKey="id"
                 size="middle"
@@ -65,6 +65,10 @@ export function AtRiskCard({ tasks, totalCount, now, onOpenTasks }: AtRiskCardPr
                 columns={columns}
                 pagination={false}
                 scroll={{ x: true }}
+                onRow={() => ({
+                    onClick: onOpenTasks,
+                    style: { cursor: "pointer" }
+                })}
                 locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing at risk. Every open task is on track." /> }}
             />
         </ConfigProvider>
