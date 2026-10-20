@@ -1,6 +1,6 @@
 import {Button, Layout, Popconfirm, Result, Space, Spin, Tag, theme, Typography, notification, type TabsProps, Tabs} from "antd";
 import {useState} from "react";
-import {useNavigate, useParams} from "react-router";
+import {useNavigate, useParams, useSearchParams} from "react-router";
 import useSWR, {mutate} from "swr";
 import {type ClubEvent, UpdateEventSchema} from "@knot/backend/events";
 import dayjs from "dayjs";
@@ -45,7 +45,8 @@ function EventInformation(props: { id: string }) {
     const user = useUser();
     const [api, contextHolder] = useAppNotification();
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState("overview");
+    const [searchParams] = useSearchParams();
+    const [activeTab, setActiveTab] = useState(searchParams.get("tab") ?? "overview");
     const { data, error, isLoading } = useSWR<ClubEvent, AxiosError>(props.id ? `/events/${props.id}` : null);
 
     if (isLoading) return <Spin />

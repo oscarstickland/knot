@@ -95,6 +95,7 @@ function UpcomingTaskList(props: { tasks: TaskWithRelations[] }) {
                 key: "title",
                 title: "Task",
                 dataIndex: "title",
+                render: (_, record) => <Link to={`/app/events/${record.eventId}?tab=tasks`}>{record.title}</Link>
             },
             {
                 key: "event",
