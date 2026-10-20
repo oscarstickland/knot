@@ -11,6 +11,7 @@ import { logger } from "hono/logger";
 import { eventAttendanceApp } from "./routes/event-attendance.ts";
 import { budgetApp } from "./routes/budget.ts";
 import { eventDocumentsApp } from "./routes/event-documents.ts";
+import { eventOverviewApp } from "./routes/event-overview.ts";
 
 export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabase) {
     const app = new Hono();
@@ -33,6 +34,7 @@ export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabas
     app.route("/api/user", userApp);
     app.route("/api/auth", authApp);
     app.route("/api/events", eventsApp);
+    app.route("/api/events", eventOverviewApp);
     app.route("/api/attendance", eventAttendanceApp);
     app.route("/api/tasks", tasksApp);
     app.route("/api/budget", budgetApp);
