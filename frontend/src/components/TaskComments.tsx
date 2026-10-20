@@ -91,8 +91,10 @@ function CommentItem(props: { comment: TaskCommentWithAuthor; eventId: number })
                 {!isEditing && (isAuthor || canDelete) && <Space size={0} style={{ marginLeft: "auto" }}>
                     {isAuthor && <Button size="small" type="text" icon={<EditOutlined />} onClick={() => setIsEditing(true)} aria-label="Edit comment" />}
                     {canDelete && <Popconfirm
-                        title="Delete comment"
-                        description="Are you sure you want to delete this comment?"
+                        title={isAuthor ? "Delete comment" : "Delete someone else's comment"}
+                        description={isAuthor
+                            ? "Are you sure you want to delete this comment?"
+                            : `You are deleting a comment made by ${comment.author?.name ?? `User ${comment.authorId}`}. Are you sure you want to delete it?`}
                         onConfirm={deleteComment}
                         okText="Delete"
                         okButtonProps={{ danger: true }}
