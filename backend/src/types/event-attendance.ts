@@ -6,6 +6,8 @@ export const RegisterAttendanceSchema = z.object({
     email: z.string().email()
 });
 
+export const UpdateAttendanceSchema = RegisterAttendanceSchema;
+
 export const EventAttendanceInfoSchema = z.object({
     slug: z.string(),
     name: z.string(),
@@ -27,6 +29,7 @@ export const AttendanceCheckInSchema = z.object({
 });
 
 export type RegisterAttendanceData = z.infer<typeof RegisterAttendanceSchema>;
+export type UpdateAttendanceData = z.infer<typeof UpdateAttendanceSchema>;
 export type EventAttendanceInfo = z.infer<typeof EventAttendanceInfoSchema>;
 export type AttendanceSummary = z.infer<typeof AttendanceSummarySchema>;
 export type AttendanceCheckIn = z.infer<typeof AttendanceCheckInSchema>;

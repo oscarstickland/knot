@@ -1,12 +1,13 @@
-import { useRef } from "react";
-import { Alert, Button, Card, Col, ConfigProvider, notification, Progress, Row, Space, Statistic, Table, Tag, theme, Typography, type TableProps } from "antd";
-import { CopyOutlined, DownloadOutlined } from "@ant-design/icons";
+import { useRef, useState } from "react";
+import { Alert, Button, Card, Col, ConfigProvider, notification, Popconfirm, Progress, Row, Space, Statistic, Table, Tag, theme, Typography, type TableProps } from "antd";
+import { CopyOutlined, DownloadOutlined, EditOutlined } from "@ant-design/icons";
 import type { ClubEvent } from "@knot/backend/events";
 import type { AttendanceCheckIn, AttendanceSummary } from "@knot/backend/event-attendance";
 import QRCode from "react-qr-code";
 import useSWR from "swr";
 import type { AxiosError } from "axios";
 import dayjs from "dayjs";
+import { EditAttendeeModal } from "@/components/EditAttendeeModal.tsx";
 
 const { Title, Text } = Typography;
 
@@ -15,6 +16,7 @@ export function AttendanceTab(props: { event: ClubEvent, active: boolean }) {
     const [api, contextHolder] = notification.useNotification();
     const checkInUrl = `${window.location.origin}/attendance/${props.event.slug}/register`;
     const qrContainerRef = useRef<HTMLDivElement>(null);
+    const [editing, setEditing] = useState<AttendanceCheckIn | null>(null);
 
     const { data: summary, error: summaryError, isLoading: summaryLoading } =
         useSWR<AttendanceSummary, AxiosError>(`/attendance/${props.event.id}/summary`, {
@@ -189,6 +191,19 @@ export function AttendanceTab(props: { event: ClubEvent, active: boolean }) {
                                     key: "createdAt",
                                     title: "Checked in",
                                     render: (_, record) => <span>{dayjs(record.createdAt).format("D MMM, h:mm A")}</span>
+                                },
+                                {
+                                    key: "actions",
+                                    title: "",
+                                    width: 56,
+                                    render: (_, record) => <Popconfirm
+                                        title="Edit someone else's details?"
+                                        description={`You are about to change the details ${record.name} entered themselves. Only continue to correct a mistake.`}
+                                        okText="Continue"
+                                        onConfirm={() => setEditing(record)}
+                                    >
+                                        <Button size="small" type="text" icon={<EditOutlined />} aria-label={`Edit ${record.name}`} />
+                                    </Popconfirm>
                                 }
                             ] as TableProps<AttendanceCheckIn>['columns']}
                         />
@@ -196,5 +211,11 @@ export function AttendanceTab(props: { event: ClubEvent, active: boolean }) {
                 }
             </Card>
         </Col>
+        {editing && <EditAttendeeModal
+            eventId={props.event.id}
+            attendee={editing}
+            open
+            onClose={() => setEditing(null)}
+        />}
     </Row>
 }

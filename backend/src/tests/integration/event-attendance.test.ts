@@ -260,4 +260,83 @@ describe("Database Integration Test", () => {
             ]);
         });
     });
+    describe("PUT /:eventId/check-ins/:checkInId", () => {
+        async function setupCheckIn(clubId: number) {
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", location: "Main Hall", start: new Date(), end: new Date(Date.now() + 5000), clubId })
+                .returning();
+            const [checkIn] = await insertCheckIns(harness.db, event!.id, 1);
+            return { event: event!, checkIn: checkIn! };
+        }
+
+        const put = (app: Awaited<ReturnType<TestDatabaseHarness["setupApp"]>>, path: string, cookie: string, body: unknown) =>
+            app.request(path, {
+                method: "PUT",
+                headers: { cookie, "content-type": "application/json" },
+                body: JSON.stringify(body)
+            });
+
+        it.each(["standard", "exec", "admin"] as const)("allows %s to update an attendee's details", async (role) => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", role, club.id, "User");
+            const { event, checkIn } = await setupCheckIn(club.id);
+
+            const res = await put(app, `/api/attendance/${event.id}/check-ins/${checkIn.id}`, cookie, { name: "New Name", email: "new@test.com" });
+            expect(res.status).toBe(200);
+            expect(await res.json()).toMatchObject({ id: checkIn.id, name: "New Name", email: "new@test.com" });
+
+            const stored = await harness.db.query.eventAttendanceTable.findFirst({ where: { id: checkIn.id } });
+            expect(stored).toMatchObject({ name: "New Name", email: "new@test.com" });
+        });
+
+        it("returns 400 for an invalid email", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+            const { event, checkIn } = await setupCheckIn(club.id);
+
+            const res = await put(app, `/api/attendance/${event.id}/check-ins/${checkIn.id}`, cookie, { name: "Name", email: "not-an-email" });
+            expect(res.status).toBe(400);
+        });
+
+        it("returns 404 for a check-in that does not exist", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+            const { event } = await setupCheckIn(club.id);
+
+            const res = await put(app, `/api/attendance/${event.id}/check-ins/999999`, cookie, { name: "Name", email: "a@test.com" });
+            expect(res.status).toBe(404);
+        });
+
+        it("returns 404 for an event in another club and leaves the check-in untouched", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const otherClub = await harness.setupClub("Other Club");
+            const { cookie } = await harness.setupUser("outsider@test.com", "admin", otherClub.id, "Outsider");
+            const { event, checkIn } = await setupCheckIn(club.id);
+
+            const res = await put(app, `/api/attendance/${event.id}/check-ins/${checkIn.id}`, cookie, { name: "Hacked", email: "hacked@test.com" });
+            expect(res.status).toBe(404);
+
+            const stored = await harness.db.query.eventAttendanceTable.findFirst({ where: { id: checkIn.id } });
+            expect(stored?.name).toBe(checkIn.name);
+        });
+
+        it("returns 409 when the email is already used by another attendee of the event", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+            const [event] = await harness.db
+                .insert(eventsTable)
+                .values({ name: "Event", location: "Main Hall", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id })
+                .returning();
+            const [first, second] = await insertCheckIns(harness.db, event!.id, 2);
+
+            const res = await put(app, `/api/attendance/${event!.id}/check-ins/${first!.id}`, cookie, { name: first!.name, email: second!.email });
+            expect(res.status).toBe(409);
+        });
+    });
 });
