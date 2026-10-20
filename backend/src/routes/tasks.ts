@@ -178,6 +178,8 @@ tasksApp.get("/me", async (c) => {
             assignments: { userId: user.id },
             event: { clubId: user.club.id }
         },
+        // Soonest due first; Postgres sorts nulls last on ASC, so undated tasks sink to the bottom.
+        orderBy: { dueDate: "asc", id: "asc" },
         with: { event: true, assignments: assignmentsWithUser, ...dependencyLinks, documents: true, comments: commentIds }
     });
 
