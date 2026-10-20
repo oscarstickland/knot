@@ -112,7 +112,7 @@ function EventInformation(props: { id: string }) {
         {
             key: "overview",
             label: "Overview",
-            children: <OverviewTab />
+            children: <OverviewTab event={data} active={activeTab === "overview"} onNavigate={setActiveTab} />
         },
         {
             key: "tasks",
