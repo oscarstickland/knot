@@ -69,7 +69,7 @@ function UpcomingTasks() {
     const dataVisible = tasks.data && tasks.data.length > 0;
 
     const EmptyTasks = () => {
-        return <div style={{ display: 'flex', flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%" }}>
+        return <div style={{ display: 'flex', flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
             <p style={{ margin: 0 }}>No Upcoming Tasks</p>
             <p style={{ margin: "0.5em 0 0", color: token.colorTextSecondary }}>Assign Yourself to a Task to See it Here</p>
         </div>
@@ -78,7 +78,8 @@ function UpcomingTasks() {
     return <Card
         title="Upcoming Tasks"
         loading={tasks.isLoading}
-        styles={{ body: { padding: dataVisible ? "0" : undefined } }}
+        style={{ display: "flex", flexDirection: "column" }}
+        styles={{ body: { padding: dataVisible ? "0" : undefined, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" } }}
     >
         { tasks.data && tasks.data.length === 0 ? <EmptyTasks /> : null }
         { tasks.data && tasks.data.length > 0 ? <UpcomingTaskList tasks={tasks.data} /> : null }
@@ -87,6 +88,7 @@ function UpcomingTasks() {
 
 function UpcomingTaskList(props: { tasks: TaskWithRelations[] }) {
     return <Table
+        className="card-flush-table"
         rowKey="id"
         dataSource={props.tasks ?? []}
         pagination={false}
@@ -95,6 +97,7 @@ function UpcomingTaskList(props: { tasks: TaskWithRelations[] }) {
                 key: "title",
                 title: "Task",
                 dataIndex: "title",
+                render: (_, record) => <Link to={`/app/events/${record.eventId}?tab=tasks`}>{record.title}</Link>
             },
             {
                 key: "event",

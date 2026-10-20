@@ -161,11 +161,11 @@ export function BudgetSection(props: { eventId: number }) {
 
     return <div>
         <Space size="large" style={{ marginBottom: "24px" }}>
-            <Statistic title="Total Allocated" value={totalAllocated} precision={2} prefix="$" />
-            <Statistic title="Total Spent" value={totalSpent} precision={2} prefix="$" />
-            <Statistic title="Total Income" value={totalIncome} precision={2} prefix="$" />
+            <Statistic title="Allocated" value={totalAllocated} precision={2} prefix="$" />
+            <Statistic title="Spent" value={totalSpent} precision={2} prefix="$" />
+            <Statistic title="Income" value={totalIncome} precision={2} prefix="$" />
             <Statistic
-                title="Net (Income − Spent)"
+                title="Surplus"
                 value={net}
                 precision={2}
                 prefix="$"
