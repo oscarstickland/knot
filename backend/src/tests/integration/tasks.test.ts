@@ -1,4 +1,5 @@
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect } from "bun:test";
+import { eq } from "drizzle-orm";
 import { type TestDatabaseHarness, setupHarness } from "../harness.ts";
 import { eventsTable, tasksTable, taskAssignmentsTable, taskDependenciesTable } from "../../db/schema.ts";
 import type { Task, TaskWithRelations } from "../../types/tasks.ts";
@@ -507,6 +508,27 @@ describe("Task Integration Test", () => {
             expect(res.status).toBe(200);
             const body = await res.json() as Task[];
             expect(body).toEqual([]);
+        });
+
+        it("orders tasks by soonest due date, with undated tasks last", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user: member, cookie } = await harness.setupUser("member@test.com", "standard", club.id, "Member");
+
+            // Created first so insertion order would put the undated task at the top.
+            const undated = await setupTask(event.id, admin.id, "No Due Date");
+            const later = await setupTask(event.id, admin.id, "Later");
+            const sooner = await setupTask(event.id, admin.id, "Sooner");
+            await harness.db.update(tasksTable).set({ dueDate: new Date("2030-02-01T00:00:00Z") }).where(eq(tasksTable.id, later.id));
+            await harness.db.update(tasksTable).set({ dueDate: new Date("2030-01-01T00:00:00Z") }).where(eq(tasksTable.id, sooner.id));
+            for (const task of [undated, later, sooner]) await assignUser(task.id, member.id);
+
+            const res = await app.request("/api/tasks/me", { headers: { cookie } });
+            expect(res.status).toBe(200);
+            const body = await res.json() as Task[];
+            expect(body.map((task) => task.id)).toEqual([sooner.id, later.id, undated.id]);
         });
 
         it("does not return tasks from a different club", async () => {
