@@ -47,3 +47,8 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
     .spend-strip { animation: none; }
 }
+
+/* A table sitting flush inside a Card: drop the last row's border so it doesn't double up with the card edge. */
+.card-flush-table .ant-table-tbody > tr:last-child > td {
+    border-bottom: none;
+}
