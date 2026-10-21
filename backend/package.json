@@ -21,12 +21,14 @@
     "./event-overview": "./src/types/event-overview.ts",
     "./tasks": "./src/types/tasks.ts",
     "./task-dependencies": "./src/services/task-dependencies.ts",
+    "./super-admin": "./src/types/super-admin.ts",
     "./user": "./src/types/user.ts"
   },
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "typecheck": "tsc --noEmit",
-    "migrate": "drizzle-kit migrate"
+    "migrate": "drizzle-kit migrate",
+    "create-super-admin": "bun src/scripts/create-super-admin.ts"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.9.0",

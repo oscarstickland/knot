@@ -12,6 +12,7 @@ import { eventAttendanceApp } from "./routes/event-attendance.ts";
 import { budgetApp } from "./routes/budget.ts";
 import { eventDocumentsApp } from "./routes/event-documents.ts";
 import { eventOverviewApp } from "./routes/event-overview.ts";
+import { superAdminApp } from "./routes/super-admin.ts";
 
 export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabase) {
     const app = new Hono();
@@ -39,6 +40,7 @@ export function createApp(dbMiddleware: MiddlewareHandler<DbEnv> = attachDatabas
     app.route("/api/tasks", tasksApp);
     app.route("/api/budget", budgetApp);
     app.route("/api/event-documents", eventDocumentsApp);
+    app.route("/api/super-admin", superAdminApp);
     app.all("/api/*", (c) => { throw new HTTPException(404) });
 
     // Serve the frontend
