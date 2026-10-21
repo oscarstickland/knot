@@ -70,9 +70,9 @@ export function ManageTeamModal({ eventId, teamWide, team }: ManageTeamModalProp
         .map((member) => ({ value: member.id, label: member.name, email: member.email }));
 
     // Members already on the team who are no longer assignable (e.g. offboarded) stay listed so they can be removed.
-    const selectedMembers = selected.map((id) => {
-        const member = members?.find((m) => m.id === id) ?? team.find((m) => m.id === id);
-        return { id, name: member?.name ?? `Member ${id}`, email: member && "email" in member ? member.email : undefined };
+    const selectedMembers = selected.map((id): { id: number; name: string; email?: string } => {
+        const listed = members?.find((m) => m.id === id);
+        return { id, name: listed?.name ?? team.find((m) => m.id === id)?.name ?? `Member ${id}`, email: listed?.email };
     });
 
     return <>
