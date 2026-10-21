@@ -63,6 +63,15 @@ export const tasksTable = pgTable("tasks", {
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
 });
 
+// Members of the club working on an event. Separate from task assignments, which are per task.
+export const eventMembersTable = pgTable("event_members", {
+    eventId: integer("event_id").notNull(),
+    userId: integer("user_id").notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+    primaryKey({ columns: [table.eventId, table.userId] })
+]);
+
 export const taskAssignmentsTable = pgTable("task_assignments", {
     taskId: integer("task_id").notNull(),
     userId: integer("user_id").notNull(),
@@ -174,7 +183,8 @@ export const relations = defineRelations({
     budgetCategoriesTable,
     expensesTable,
     incomeTable,
-    eventDocumentsTable
+    eventDocumentsTable,
+    eventMembersTable
 }, (r) => ({
     usersTable: {
         club: r.one.clubsTable({
@@ -191,7 +201,8 @@ export const relations = defineRelations({
         budgetCategories: r.many.budgetCategoriesTable(),
         expenses: r.many.expensesTable(),
         income: r.many.incomeTable(),
-        documents: r.many.eventDocumentsTable()
+        documents: r.many.eventDocumentsTable(),
+        members: r.many.eventMembersTable()
     },
     clubsTable: {
         users: r.many.usersTable(),
@@ -313,6 +324,16 @@ export const relations = defineRelations({
         }),
         addedByUser: r.one.usersTable({
             from: r.eventDocumentsTable.addedBy,
+            to: r.usersTable.id
+        })
+    },
+    eventMembersTable: {
+        event: r.one.eventsTable({
+            from: r.eventMembersTable.eventId,
+            to: r.eventsTable.id
+        }),
+        user: r.one.usersTable({
+            from: r.eventMembersTable.userId,
             to: r.usersTable.id
         })
     }
