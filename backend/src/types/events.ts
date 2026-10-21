@@ -6,6 +6,8 @@ const ClubEventFields = z.object({
     location: z.string().min(1, "Location cannot be empty").max(255, "Location must be at most 255 characters"),
     start: z.string().datetime({ offset: true }).pipe(z.coerce.date()),
     end: z.string().datetime({ offset: true }).pipe(z.coerce.date()),
+    // Left out of an edit, visibility is unchanged; new events default to team-wide.
+    teamWide: z.boolean().optional(),
     expectedAttendees: z.union([z.literal(""), z.null(), z.coerce.number().int().positive()])
         .optional()
         .transform((value) => (value === "" || value === undefined || value === null ? null : value))

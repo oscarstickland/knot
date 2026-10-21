@@ -17,6 +17,7 @@
     "./budget": "./src/types/budget.ts",
     "./events": "./src/types/events.ts",
     "./event-documents": "./src/types/event-documents.ts",
+    "./event-team": "./src/types/event-team.ts",
     "./event-attendance": "./src/types/event-attendance.ts",
     "./event-overview": "./src/types/event-overview.ts",
     "./tasks": "./src/types/tasks.ts",

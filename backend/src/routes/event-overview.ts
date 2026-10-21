@@ -1,3 +1,4 @@
+import { eventAccess } from "../services/event-access.ts";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { and, count, desc, eq, max, min, sql } from "drizzle-orm";
@@ -223,7 +224,7 @@ eventOverviewApp.get("/:id{[0-9]+}/overview", async (c) => {
     const canSeeMoney = isExecOrAdmin(user.role);
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
     if (event.archived && !canSeeMoney) throw new HTTPException(404, { message: "Event not found" });

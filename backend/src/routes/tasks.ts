@@ -1,3 +1,4 @@
+import { canAccessEvent, eventAccess } from "../services/event-access.ts";
 import { Hono } from "hono";
 import { isAuthenticated, type UserEnv } from "../services/auth.ts";
 import type { DbEnv } from "../db/connection.ts";
@@ -45,13 +46,14 @@ const dependencyLinks = {
     dependents: { with: { task: linkedTaskSummary } }
 } as const;
 
-async function loadClubTask(db: Db, taskId: number, clubId: number) {
+async function loadClubTask(db: Db, taskId: number, user: UserEnv["Variables"]["user"]) {
     const task = await db.query.tasksTable.findFirst({
         where: { id: taskId },
         with: { event: true }
     });
 
-    if (!task || !task.event || task.event.clubId !== clubId) return null;
+    if (!task || !task.event || task.event.clubId !== user.club.id) return null;
+    if (!(await canAccessEvent(db, task.event.id, user))) return null;
     return task;
 }
 
@@ -156,7 +158,7 @@ tasksApp.get("/", async (c) => {
     if (!eventId) throw new HTTPException(400, { message: "eventId query parameter is required" });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -176,7 +178,7 @@ tasksApp.get("/me", async (c) => {
     const tasks = await db.query.tasksTable.findMany({
         where: {
             assignments: { userId: user.id },
-            event: { clubId: user.club.id }
+            event: eventAccess(user)
         },
         // Soonest due first; Postgres sorts nulls last on ASC, so undated tasks sink to the bottom.
         orderBy: { dueDate: "asc", id: "asc" },
@@ -196,7 +198,9 @@ tasksApp.get("/:id{[0-9]+}", async (c) => {
         with: { event: true, assignments: assignmentsWithUser, ...dependencyLinks, documents: true, auditLog: true, comments: commentIds  }
     });
 
-    if (!task || !task.event || task.event.clubId !== user.club.id) throw new HTTPException(404, { message: "Task not found" });
+    if (!task || !task.event || task.event.clubId !== user.club.id || !(await canAccessEvent(db, task.event.id, user))) {
+        throw new HTTPException(404, { message: "Task not found" });
+    }
 
     return c.json(withCommentCount(task));
 });
@@ -211,7 +215,7 @@ tasksApp.post("/", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: parsed.data.eventId, clubId: user.club.id }
+        where: { id: parsed.data.eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -268,7 +272,7 @@ tasksApp.put("/:id{[0-9]+}", async (c) => {
     const parsed = UpdateTaskSchema.safeParse(body);
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
-    const existingTask = await loadClubTask(db, taskId, user.club.id);
+    const existingTask = await loadClubTask(db, taskId, user);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
     if (parsed.data.eventId !== existingTask.eventId) {
         throw new HTTPException(400, { message: "A task cannot be moved to a different event" });
@@ -322,7 +326,7 @@ tasksApp.patch("/:id{[0-9]+}/progress", async (c) => {
     const db = c.get("db");
     const taskId = Number(c.req.param("id"));
 
-    const existingTask = await loadClubTask(db, taskId, user.club.id);
+    const existingTask = await loadClubTask(db, taskId, user);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
 
     const allowed = isExecOrAdmin(user.role) || await isAssignedToTask(db, taskId, user.id);
@@ -361,7 +365,7 @@ tasksApp.post("/:id{[0-9]+}/documents", async (c) => {
     const db = c.get("db");
     const taskId = Number(c.req.param("id"));
 
-    const existingTask = await loadClubTask(db, taskId, user.club.id);
+    const existingTask = await loadClubTask(db, taskId, user);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
 
     const allowed = isExecOrAdmin(user.role) || await isAssignedToTask(db, taskId, user.id);
@@ -395,7 +399,7 @@ tasksApp.get("/:id{[0-9]+}/comments", async (c) => {
     const db = c.get("db");
     const taskId = Number(c.req.param("id"));
 
-    const existingTask = await loadClubTask(db, taskId, user.club.id);
+    const existingTask = await loadClubTask(db, taskId, user);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
 
     const comments = await db.query.taskCommentsTable.findMany({
@@ -412,7 +416,7 @@ tasksApp.post("/:id{[0-9]+}/comments", async (c) => {
     const db = c.get("db");
     const taskId = Number(c.req.param("id"));
 
-    const existingTask = await loadClubTask(db, taskId, user.club.id);
+    const existingTask = await loadClubTask(db, taskId, user);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
 
     const body = await c.req.json();
@@ -435,7 +439,7 @@ tasksApp.put("/:id{[0-9]+}/comments/:commentId{[0-9]+}", async (c) => {
     const taskId = Number(c.req.param("id"));
     const commentId = Number(c.req.param("commentId"));
 
-    const existingTask = await loadClubTask(db, taskId, user.club.id);
+    const existingTask = await loadClubTask(db, taskId, user);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
 
     const existingComment = await loadTaskComment(db, taskId, commentId);
@@ -461,7 +465,7 @@ tasksApp.delete("/:id{[0-9]+}/comments/:commentId{[0-9]+}", async (c) => {
     const taskId = Number(c.req.param("id"));
     const commentId = Number(c.req.param("commentId"));
 
-    const existingTask = await loadClubTask(db, taskId, user.club.id);
+    const existingTask = await loadClubTask(db, taskId, user);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
 
     const existingComment = await loadTaskComment(db, taskId, commentId);

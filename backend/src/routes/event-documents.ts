@@ -1,3 +1,4 @@
+import { canAccessEvent } from "../services/event-access.ts";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { eq } from "drizzle-orm";
@@ -25,6 +26,7 @@ async function loadManageableDocument(db: Db, documentId: number, user: UserEnv[
     });
 
     if (!document || !document.event || document.event.clubId !== user.club.id) return null;
+    if (!(await canAccessEvent(db, document.event.id, user))) return null;
     if (!isExecOrAdmin(user.role) && document.addedBy !== user.id) return null;
     return document;
 }

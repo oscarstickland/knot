@@ -15,11 +15,13 @@ import {
     type MemberBudgetView
 } from "../types/budget.ts";
 import {CreateEventDocumentSchema} from "../types/event-documents.ts";
+import {SetEventTeamSchema, type EventTeamMember} from "../types/event-team.ts";
 import {
     budgetCategoriesTable,
     clubsTable,
     eventAttendanceTable,
     eventDocumentsTable,
+    eventMembersTable,
     eventsTable,
     expensesTable,
     incomeTable,
@@ -27,10 +29,12 @@ import {
     taskDependenciesTable,
     taskAuditLogTable,
     taskDocumentsTable,
-    tasksTable
+    tasksTable,
+    usersTable
 } from "../db/schema.ts";
 import {and, count, eq, inArray, sql} from "drizzle-orm";
 import {describeZodError} from "../types/errors.ts";
+import {eventAccess} from "../services/event-access.ts";
 
 function isExecOrAdmin(role: string): boolean {
     return role === "exec" || role === "admin";
@@ -53,10 +57,10 @@ eventsApp.get("/", async (c) => {
 
     const events = await db.query.eventsTable.findMany({
         where: archivedParam === "true"
-            ? { clubId: user.club.id, archived: true }
+            ? { ...eventAccess(user), archived: true }
             : archivedParam === "false"
-                ? { clubId: user.club.id, archived: false }
-                : { clubId: user.club.id }
+                ? { ...eventAccess(user), archived: false }
+                : eventAccess(user)
     });
 
     const eventIds = events.map((event) => event.id);
@@ -201,7 +205,7 @@ eventsApp.get("/:id{[0-9]+}", async (c) => {
     const user = c.var.user;
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     })
 
     if (!event) throw new HTTPException(404, { message: "Event not found" });
@@ -221,7 +225,7 @@ eventsApp.put("/:id{[0-9]+}", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const existingEvent = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
 
     if (!existingEvent) throw new HTTPException(404, { message: "Event not found or unauthorized" });
@@ -250,7 +254,7 @@ eventsApp.delete("/:id{[0-9]+}", async (c) => {
     if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can delete events" });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found or unauthorized" });
 
@@ -269,6 +273,7 @@ eventsApp.delete("/:id{[0-9]+}", async (c) => {
         await tx.delete(expensesTable).where(eq(expensesTable.eventId, eventId));
         await tx.delete(budgetCategoriesTable).where(eq(budgetCategoriesTable.eventId, eventId));
         await tx.delete(eventAttendanceTable).where(eq(eventAttendanceTable.eventId, eventId));
+        await tx.delete(eventMembersTable).where(eq(eventMembersTable.eventId, eventId));
         await tx.delete(eventsTable).where(and(eq(eventsTable.id, eventId), eq(eventsTable.clubId, user.club.id)));
     });
 
@@ -309,7 +314,7 @@ eventsApp.patch("/:id{[0-9]+}/attendance", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const existingEvent = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!existingEvent) throw new HTTPException(404, { message: "Event not found or unauthorized" });
     if (existingEvent.archived) throw new HTTPException(404, { message: "Event not found or unauthorized" });
@@ -411,7 +416,7 @@ eventsApp.get("/:id{[0-9]+}/budget", async (c) => {
     const user = c.var.user;
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -434,7 +439,7 @@ eventsApp.put("/:id{[0-9]+}/budget", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -502,7 +507,7 @@ eventsApp.post("/:id{[0-9]+}/expenses", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -538,7 +543,7 @@ eventsApp.post("/:id{[0-9]+}/income", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -562,7 +567,7 @@ eventsApp.get("/:id{[0-9]+}/documents", async (c) => {
     const user = c.var.user;
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -585,7 +590,7 @@ eventsApp.post("/:id{[0-9]+}/documents", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -595,6 +600,78 @@ eventsApp.post("/:id{[0-9]+}/documents", async (c) => {
         .returning();
 
     return c.json(document, 201);
+});
+
+eventsApp.get("/:id{[0-9]+}/team", async (c) => {
+    const eventId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const user = c.var.user;
+
+    const event = await db.query.eventsTable.findFirst({
+        where: { id: eventId, ...eventAccess(user) }
+    });
+    if (!event) throw new HTTPException(404, { message: "Event not found" });
+
+    const team: EventTeamMember[] = await db
+        .select({ id: usersTable.id, name: usersTable.name, role: usersTable.role })
+        .from(eventMembersTable)
+        .innerJoin(usersTable, eq(usersTable.id, eventMembersTable.userId))
+        .where(eq(eventMembersTable.eventId, eventId))
+        .orderBy(usersTable.name, usersTable.id) as EventTeamMember[];
+
+    return c.json(team);
+});
+
+// Replaces the whole team (and optionally who can see the event) in one go, so the picker can just send what it shows.
+eventsApp.put("/:id{[0-9]+}/team", async (c) => {
+    const eventId = Number(c.req.param("id"));
+    const db = c.get("db");
+    const user = c.var.user;
+
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can assign members to events" });
+
+    const body = await c.req.json();
+    const parsed = SetEventTeamSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
+    const { userIds, teamWide } = parsed.data;
+
+    const event = await db.query.eventsTable.findFirst({
+        where: { id: eventId, ...eventAccess(user) }
+    });
+    if (!event) throw new HTTPException(404, { message: "Event not found" });
+
+    if (userIds.length > 0) {
+        const validMembers = await db
+            .select({ id: usersTable.id })
+            .from(usersTable)
+            .where(and(
+                inArray(usersTable.id, userIds),
+                eq(usersTable.clubId, user.club.id),
+                eq(usersTable.status, "active")
+            ));
+        if (validMembers.length !== userIds.length) {
+            throw new HTTPException(400, { message: "Every assigned user must be an active member of this club" });
+        }
+    }
+
+    await db.transaction(async (tx) => {
+        if (teamWide !== undefined) {
+            await tx.update(eventsTable).set({ teamWide }).where(eq(eventsTable.id, eventId));
+        }
+        await tx.delete(eventMembersTable).where(eq(eventMembersTable.eventId, eventId));
+        if (userIds.length > 0) {
+            await tx.insert(eventMembersTable).values(userIds.map((userId) => ({ eventId, userId })));
+        }
+    });
+
+    const team = await db
+        .select({ id: usersTable.id, name: usersTable.name, role: usersTable.role })
+        .from(eventMembersTable)
+        .innerJoin(usersTable, eq(usersTable.id, eventMembersTable.userId))
+        .where(eq(eventMembersTable.eventId, eventId))
+        .orderBy(usersTable.name, usersTable.id);
+
+    return c.json(team);
 });
 
 export { eventsApp };

@@ -1,0 +1,1 @@
+ALTER TABLE "events" ADD COLUMN "team_wide" boolean DEFAULT true NOT NULL;
