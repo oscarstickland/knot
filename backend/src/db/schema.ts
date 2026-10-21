@@ -48,6 +48,8 @@ export const eventsTable = pgTable("events", {
     clubId: integer("club_id").notNull(),
     archived: boolean("archived").default(false).notNull(),
     attendanceOpen: boolean("attendance_open").default(false).notNull(),
+    // When false, only execs, admins and the event's assigned team can see it.
+    teamWide: boolean("team_wide").default(true).notNull(),
     expectedAttendees: integer("expected_attendees"),
 });
 
