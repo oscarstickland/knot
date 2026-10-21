@@ -22,6 +22,10 @@ export const UpdateTaskProgressSchema = z.object({
     progress: z.enum(taskProgressStates)
 });
 
+export const ArchiveTaskSchema = z.object({
+    archived: z.boolean()
+});
+
 export const AddTaskDocumentSchema = z.object({
     url: z.string().url()
 });
@@ -39,6 +43,7 @@ export const UpdateTaskCommentSchema = CreateTaskCommentSchema;
 export type CreateTaskData = z.infer<typeof CreateTaskSchema>;
 export type UpdateTaskData = z.infer<typeof UpdateTaskSchema>;
 export type UpdateTaskProgressData = z.infer<typeof UpdateTaskProgressSchema>;
+export type ArchiveTaskData = z.infer<typeof ArchiveTaskSchema>;
 export type AddTaskDocumentData = z.infer<typeof AddTaskDocumentSchema>;
 export type CreateTaskCommentData = z.infer<typeof CreateTaskCommentSchema>;
 export type UpdateTaskCommentData = z.infer<typeof UpdateTaskCommentSchema>;

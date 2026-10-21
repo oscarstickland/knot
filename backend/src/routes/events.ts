@@ -71,7 +71,7 @@ eventsApp.get("/", async (c) => {
             completed: count(sql`case when ${tasksTable.progress} = 'completed' then 1 end`)
         })
         .from(tasksTable)
-        .where(inArray(tasksTable.eventId, eventIds))
+        .where(and(inArray(tasksTable.eventId, eventIds), eq(tasksTable.archived, false)))
         .groupBy(tasksTable.eventId);
 
     const taskCountsByEvent = new Map(taskCounts.map((row) => [row.eventId, row]));
@@ -151,7 +151,7 @@ eventsApp.post("/:id{[0-9]+}/duplicate", async (c) => {
 
         if (includeTasks) {
             const sourceTasks = await tx.query.tasksTable.findMany({
-                where: { eventId: sourceId },
+                where: { eventId: sourceId, archived: false },
                 orderBy: { id: "asc" }
             });
             const newIdBySourceId = new Map<number, number>();

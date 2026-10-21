@@ -5,6 +5,7 @@ import type { DbEnv } from "../db/connection.ts";
 import { HTTPException } from "hono/http-exception";
 import {
     AddTaskDocumentSchema,
+    ArchiveTaskSchema,
     CreateTaskCommentSchema,
     CreateTaskSchema,
     UpdateTaskCommentSchema,
@@ -19,7 +20,7 @@ import {
     taskDocumentsTable,
     tasksTable
 } from "../db/schema.ts";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { describeZodError } from "../types/errors.ts";
 import { findCyclicDependency } from "../services/task-dependencies.ts";
 
@@ -153,7 +154,9 @@ async function assertDependenciesCompleted(db: Db, taskId: number, taskTitle: st
         with: { dependsOnTask: true }
     });
 
-    const incomplete = dependencies.filter((dependency) => dependency.dependsOnTask?.progress !== "completed");
+    // Archived prerequisites are hidden from the board, so they no longer block completion.
+    const incomplete = dependencies.filter((dependency) =>
+        !dependency.dependsOnTask?.archived && dependency.dependsOnTask?.progress !== "completed");
     if (incomplete.length > 0) {
         const incompleteTitles = incomplete.map((dependency) => dependency.dependsOnTask?.title ?? "an unknown task");
         throw new HTTPException(400, {
@@ -173,8 +176,13 @@ tasksApp.get("/", async (c) => {
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
+    const archivedParam = c.req.query("archived");
+    if (archivedParam === "true" && !isExecOrAdmin(user.role)) {
+        throw new HTTPException(403, { message: "Only club admins and execs can view archived tasks" });
+    }
+
     const tasks = await db.query.tasksTable.findMany({
-        where: { eventId },
+        where: { eventId, archived: archivedParam === "true" },
         with: { assignments: assignmentsWithUser, ...dependencyLinks, documents: true, comments: commentIds }
     });
 
@@ -189,6 +197,7 @@ tasksApp.get("/me", async (c) => {
     const tasks = await db.query.tasksTable.findMany({
         where: {
             assignments: { userId: user.id },
+            archived: false,
             event: eventAccess(user)
         },
         // Soonest due first; Postgres sorts nulls last on ASC, so undated tasks sink to the bottom.
@@ -372,6 +381,65 @@ tasksApp.patch("/:id{[0-9]+}/progress", async (c) => {
     });
 
     return c.json(updatedTask);
+});
+
+tasksApp.patch("/:id{[0-9]+}/archive", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+    const taskId = Number(c.req.param("id"));
+
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can archive or unarchive tasks" });
+
+    const existingTask = await loadClubTask(db, taskId, user);
+    if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
+
+    const body = await c.req.json();
+    const parsed = ArchiveTaskSchema.safeParse(body);
+    if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
+
+    const updatedTask = await db.transaction(async (tx) => {
+        const [task] = await tx
+            .update(tasksTable)
+            .set({ archived: parsed.data.archived })
+            .where(eq(tasksTable.id, taskId))
+            .returning();
+
+        await tx.insert(taskAuditLogTable).values({
+            taskId,
+            changedBy: user.id,
+            action: "updated",
+            changes: { archived: parsed.data.archived }
+        });
+
+        return task;
+    });
+
+    return c.json(updatedTask);
+});
+
+// Permanently removes a task and everything that hangs off it. The task audit log is
+// insert-only, so its rows are deliberately left in place.
+tasksApp.delete("/:id{[0-9]+}", async (c) => {
+    const user = c.var.user;
+    const db = c.get("db");
+    const taskId = Number(c.req.param("id"));
+
+    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can delete tasks" });
+
+    const existingTask = await loadClubTask(db, taskId, user);
+    if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
+
+    await db.transaction(async (tx) => {
+        await tx.delete(taskAssignmentsTable).where(eq(taskAssignmentsTable.taskId, taskId));
+        await tx.delete(taskDependenciesTable).where(
+            or(eq(taskDependenciesTable.taskId, taskId), eq(taskDependenciesTable.dependsOnTaskId, taskId))
+        );
+        await tx.delete(taskDocumentsTable).where(eq(taskDocumentsTable.taskId, taskId));
+        await tx.delete(taskCommentsTable).where(eq(taskCommentsTable.taskId, taskId));
+        await tx.delete(tasksTable).where(eq(tasksTable.id, taskId));
+    });
+
+    return c.json({ message: "Deleted" });
 });
 
 tasksApp.post("/:id{[0-9]+}/documents", async (c) => {
