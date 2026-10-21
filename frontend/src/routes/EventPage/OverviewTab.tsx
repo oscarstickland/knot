@@ -106,7 +106,7 @@ export function OverviewTab({ event, active, onNavigate }: OverviewTabProps) {
         event={event}
         extra={isEventManager && !event.archived ? <EventModal event={event} mode="update" /> : undefined}
     />;
-    const teamCard = <TeamCard eventId={event.id} canEdit={isEventManager && !event.archived} />;
+    const teamCard = <TeamCard eventId={event.id} teamWide={event.teamWide} canEdit={isEventManager && !event.archived} />;
     const documentsCard = <OverviewDocumentsCard documents={data.documents} onOpenDocuments={() => onNavigate("documents")} />;
 
     return <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

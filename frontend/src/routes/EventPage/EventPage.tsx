@@ -144,6 +144,7 @@ function EventInformation(props: { id: string }) {
                 <Space align="center" wrap style={{ marginBottom: 8 }}>
                     <Title level={2} style={{ margin: 0 }}>{data.name}</Title>
                     { data.archived ? <Tag>Archived</Tag> : "" }
+                    { data.teamWide ? "" : <Tag icon={<LockOutlined />}>Restricted</Tag> }
                 </Space>
                 <br />
                 <Text style={{ color: token.colorTextSecondary }}>
