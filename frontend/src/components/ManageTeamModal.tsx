@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Alert, Button, Modal, Segmented, Select, Typography } from "antd";
-import { TeamOutlined } from "@ant-design/icons";
+import { Alert, Button, List, Modal, Segmented, Select, Typography } from "antd";
+import { CloseOutlined, TeamOutlined } from "@ant-design/icons";
 import useSWR, { mutate } from "swr";
 import type { AxiosError } from "axios";
 import type { ClubMember } from "@knot/backend/user";
@@ -28,15 +28,13 @@ export function ManageTeamModal({ eventId, teamWide, team }: ManageTeamModalProp
     const [api, contextHolder] = useAppNotification();
     const { data: members, error, isLoading } = useSWR<ClubMember[], AxiosError>(open ? "/user" : null);
 
-    const activeMembers = (members ?? []).filter((member) => member.status === "active");
-    const managerIds = activeMembers.filter(isManager).map((member) => member.id);
+    // Admins and execs can always see every event, so they are never listed or saved as assignees.
+    const assignable = (members ?? []).filter((member) => member.status === "active" && !isManager(member));
     const initialIds = team.filter((member) => !isManager(member)).map((member) => member.id);
 
-    // Admins and execs can always see every event, so they are shown locked in the list and never saved as assignees.
-    const assignedIds = selected.filter((id) => !managerIds.includes(id));
     const isDirty = (audience === "everyone") !== teamWide
-        || assignedIds.length !== initialIds.length
-        || assignedIds.some((id) => !initialIds.includes(id));
+        || selected.length !== initialIds.length
+        || selected.some((id) => !initialIds.includes(id));
 
     const openModal = () => {
         setAudience(teamWide ? "everyone" : "selected");
@@ -46,7 +44,7 @@ export function ManageTeamModal({ eventId, teamWide, team }: ManageTeamModalProp
 
     const save = () => {
         setIsSubmitting(true);
-        return AxiosInstance.put(`/events/${eventId}/team`, { userIds: assignedIds, teamWide: audience === "everyone" })
+        return AxiosInstance.put(`/events/${eventId}/team`, { userIds: selected, teamWide: audience === "everyone" })
             .then(async () => {
                 await Promise.all([mutate(`/events/${eventId}/team`), mutate(`/events/${eventId}`)]);
                 await mutate((key) => typeof key === "string" && key.startsWith("/events?"));
@@ -67,12 +65,15 @@ export function ManageTeamModal({ eventId, teamWide, team }: ManageTeamModalProp
         else setOpen(false);
     }
 
-    const options = activeMembers.map((member) => ({
-        value: member.id,
-        label: isManager(member) ? `${member.name} · ${member.role}` : member.name,
-        email: member.email,
-        disabled: isManager(member)
-    }));
+    const options = assignable
+        .filter((member) => !selected.includes(member.id))
+        .map((member) => ({ value: member.id, label: member.name, email: member.email }));
+
+    // Members already on the team who are no longer assignable (e.g. offboarded) stay listed so they can be removed.
+    const selectedMembers = selected.map((id) => {
+        const member = members?.find((m) => m.id === id) ?? team.find((m) => m.id === id);
+        return { id, name: member?.name ?? `Member ${id}`, email: member && "email" in member ? member.email : undefined };
+    });
 
     return <>
         {contextHolder}
@@ -98,24 +99,46 @@ export function ManageTeamModal({ eventId, teamWide, team }: ManageTeamModalProp
                     ? <Text type="secondary">Every member of the club can see this event, its tasks and its documents.</Text>
                     : error
                         ? <Alert type="error" showIcon title="Unable to load club members." />
-                        : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        : <div>
+                            <Typography.Paragraph type="secondary">
+                                Execs and above can access this event automatically, so they don't need to be assigned. Changes save when you close this window.
+                            </Typography.Paragraph>
                             <Select
-                                mode="multiple"
+                                showSearch
                                 style={{ width: "100%" }}
-                                placeholder="Search members"
-                                aria-label="Members who can see this event"
+                                placeholder="Search members to add"
+                                aria-label="Add team member"
                                 loading={isLoading}
-                                value={[...new Set([...managerIds, ...selected])]}
-                                onChange={setSelected}
+                                value={null}
+                                onChange={(id: number) => setSelected((current) => [...current, id])}
                                 options={options}
                                 optionFilterProp="label"
                                 filterOption={(input, option) =>
                                     `${option?.label ?? ""} ${option?.email ?? ""}`.toLowerCase().includes(input.toLowerCase())}
-                                maxTagCount="responsive"
                             />
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                                Admins and execs can always see every event. Changes save when you close this window.
-                            </Text>
+                            <List
+                                size="small"
+                                style={{ marginTop: 16, maxHeight: 320, overflowY: "auto" }}
+                                locale={{ emptyText: "No team members assigned yet." }}
+                                dataSource={selectedMembers}
+                                renderItem={(member) => (
+                                    <List.Item
+                                        actions={[
+                                            <Button
+                                                key="remove"
+                                                type="text"
+                                                size="small"
+                                                danger
+                                                icon={<CloseOutlined />}
+                                                aria-label={`Remove ${member.name}`}
+                                                onClick={() => setSelected((current) => current.filter((id) => id !== member.id))}
+                                            />
+                                        ]}
+                                    >
+                                        <List.Item.Meta title={member.name} description={member.email} />
+                                    </List.Item>
+                                )}
+                            />
                         </div>
                 }
             </div>
