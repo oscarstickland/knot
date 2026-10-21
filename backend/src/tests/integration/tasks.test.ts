@@ -904,4 +904,121 @@ describe("Task Integration Test", () => {
             expect(res.status).toBe(404);
         });
     });
+
+    describe("PATCH /api/tasks/:id/archive", () => {
+        it("lets an exec archive and unarchive a task", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: exec, cookie } = await harness.setupUser("exec@test.com", "exec", club.id, "Exec");
+            const task = await setupTask(event.id, exec.id);
+
+            const archiveRes = await app.request(`/api/tasks/${task.id}/archive`, {
+                method: "PATCH",
+                headers: { cookie },
+                body: JSON.stringify({ archived: true })
+            });
+            expect(archiveRes.status).toBe(200);
+
+            const listRes = await app.request(`/api/tasks?eventId=${event.id}`, { headers: { cookie } });
+            expect((await listRes.json() as Task[]).length).toBe(0);
+
+            const archivedRes = await app.request(`/api/tasks?eventId=${event.id}&archived=true`, { headers: { cookie } });
+            expect((await archivedRes.json() as Task[]).map((t) => t.id)).toEqual([task.id]);
+
+            const restoreRes = await app.request(`/api/tasks/${task.id}/archive`, {
+                method: "PATCH",
+                headers: { cookie },
+                body: JSON.stringify({ archived: false })
+            });
+            expect(restoreRes.status).toBe(200);
+            const restored = await harness.db.query.tasksTable.findFirst({ where: { id: task.id } });
+            expect(restored!.archived).toBe(false);
+        });
+
+        it("prevents a standard user archiving a task or viewing archived tasks", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const task = await setupTask(event.id, admin.id);
+
+            const res = await app.request(`/api/tasks/${task.id}/archive`, {
+                method: "PATCH",
+                headers: { cookie },
+                body: JSON.stringify({ archived: true })
+            });
+            expect(res.status).toBe(403);
+
+            const listRes = await app.request(`/api/tasks?eventId=${event.id}&archived=true`, { headers: { cookie } });
+            expect(listRes.status).toBe(403);
+        });
+
+        it("no longer lets an archived prerequisite block completion", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const dependency = await setupTask(event.id, admin.id, "Prerequisite", "backlog");
+            const task = await setupTask(event.id, admin.id, "Dependent", "in_progress");
+            await setupDependency(task.id, dependency.id);
+            await harness.db.update(tasksTable).set({ archived: true }).where(eq(tasksTable.id, dependency.id));
+
+            const res = await app.request(`/api/tasks/${task.id}/progress`, {
+                method: "PATCH",
+                headers: { cookie },
+                body: JSON.stringify({ progress: "completed" })
+            });
+            expect(res.status).toBe(200);
+        });
+    });
+
+    describe("DELETE /api/tasks/:id", () => {
+        it("lets an admin delete a task along with its assignments and dependency links", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin, cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const task = await setupTask(event.id, admin.id, "Doomed");
+            const other = await setupTask(event.id, admin.id, "Other");
+            await assignUser(task.id, admin.id);
+            await setupDependency(other.id, task.id);
+
+            const res = await app.request(`/api/tasks/${task.id}`, { method: "DELETE", headers: { cookie } });
+            expect(res.status).toBe(200);
+
+            expect(await harness.db.query.tasksTable.findFirst({ where: { id: task.id } })).toBeUndefined();
+            expect(await harness.db.query.taskAssignmentsTable.findMany({ where: { taskId: task.id } })).toEqual([]);
+            expect(await harness.db.query.taskDependenciesTable.findMany({ where: { dependsOnTaskId: task.id } })).toEqual([]);
+            expect(await harness.db.query.tasksTable.findFirst({ where: { id: other.id } })).toBeDefined();
+        });
+
+        it("prevents a standard user deleting a task", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user: standard, cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const task = await setupTask(event.id, admin.id);
+            await assignUser(task.id, standard.id);
+
+            const res = await app.request(`/api/tasks/${task.id}`, { method: "DELETE", headers: { cookie } });
+            expect(res.status).toBe(403);
+            expect(await harness.db.query.tasksTable.findFirst({ where: { id: task.id } })).toBeDefined();
+        });
+
+        it("prevents deleting a task belonging to another club", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const otherClub = await harness.setupClub("Other Club");
+            const event = await setupEvent(otherClub.id);
+            const { user: otherAdmin } = await harness.setupUser("other-admin@test.com", "admin", otherClub.id, "Other Admin");
+            const { cookie } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const task = await setupTask(event.id, otherAdmin.id);
+
+            const res = await app.request(`/api/tasks/${task.id}`, { method: "DELETE", headers: { cookie } });
+            expect(res.status).toBe(404);
+        });
+    });
 });

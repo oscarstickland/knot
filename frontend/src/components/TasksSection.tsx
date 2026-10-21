@@ -5,6 +5,7 @@ import {
     Empty,
     Result,
     Select,
+    Switch,
     Table,
     Tag,
     Tooltip,
@@ -44,7 +45,10 @@ export function TasksSection(props: { eventId: number }) {
     const { token } = theme.useToken();
     const user = useUser();
     const isTaskManager = user.role === "admin" || user.role === "exec";
-    const { data: tasks, isLoading, error } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${props.eventId}`);
+    const [showArchived, setShowArchived] = useState(false);
+    const { data: tasks, isLoading, error } = useSWR<TaskWithRelations[]>(
+        `/tasks?eventId=${props.eventId}${showArchived ? "&archived=true" : ""}`
+    );
     const [openTaskId, setOpenTaskId] = useState<number | null>(null);
 
     if (error) {
@@ -56,9 +60,14 @@ export function TasksSection(props: { eventId: number }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-end',
+            gap: "16px",
             paddingBottom: "16px"
         }}>
-            <TaskDrawer mode="create" eventId={props.eventId} isTaskManager={isTaskManager} />
+            {isTaskManager && <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Switch size="small" checked={showArchived} onChange={(value) => { setOpenTaskId(null); setShowArchived(value); }} />
+                <Text type="secondary">Show archived</Text>
+            </label>}
+            {!showArchived && <TaskDrawer mode="create" eventId={props.eventId} isTaskManager={isTaskManager} />}
         </div>
 
         <Table
@@ -68,7 +77,7 @@ export function TasksSection(props: { eventId: number }) {
             dataSource={tasks ?? []}
             pagination={false}
             scroll={{ x: "max-content" }}
-            locale={{ emptyText: <Empty description="No tasks yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+            locale={{ emptyText: <Empty description={showArchived ? "No archived tasks" : "No tasks yet"} image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
             onRow={(task) => ({
                 onClick: () => setOpenTaskId(task.id),
                 style: { cursor: "pointer", ...completedRowStyle(task, token).row }
