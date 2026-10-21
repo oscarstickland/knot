@@ -61,6 +61,7 @@ export const tasksTable = pgTable("tasks", {
     priority: taskPriorityEnum().default("medium").notNull(),
     progress: taskProgressEnum().default("backlog").notNull(),
     dueDate: timestamp("due_date", { mode: "date", withTimezone: true }),
+    archived: boolean("archived").default(false).notNull(),
     createdBy: integer("created_by").notNull(),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
 });
