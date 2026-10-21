@@ -22,6 +22,7 @@ import { EventDetailsCard } from "@/components/overview/EventDetailsCard.tsx";
 import { OverviewDocumentsCard } from "@/components/overview/OverviewDocumentsCard.tsx";
 import { AttendanceCard } from "@/components/overview/AttendanceCard.tsx";
 import { FinancialsCard } from "@/components/overview/FinancialsCard.tsx";
+import { TeamCard } from "@/components/overview/TeamCard.tsx";
 import { TaskCompletionCard } from "@/components/overview/TaskCompletionCard.tsx";
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -105,6 +106,7 @@ export function OverviewTab({ event, active, onNavigate }: OverviewTabProps) {
         event={event}
         extra={isEventManager && !event.archived ? <EventModal event={event} mode="update" /> : undefined}
     />;
+    const teamCard = <TeamCard eventId={event.id} canEdit={isEventManager && !event.archived} />;
     const documentsCard = <OverviewDocumentsCard documents={data.documents} onOpenDocuments={() => onNavigate("documents")} />;
 
     return <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -136,11 +138,13 @@ export function OverviewTab({ event, active, onNavigate }: OverviewTabProps) {
                     {hasEnded
                         ? <>
                             <TaskCompletionCard tasks={data.tasks} onOpenTasks={() => onNavigate("tasks")} />
+                            {teamCard}
                             {documentsCard}
                             {detailsCard}
                         </>
                         : <>
                             {detailsCard}
+                            {teamCard}
                             {documentsCard}
                         </>
                     }
