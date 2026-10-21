@@ -4,6 +4,7 @@ import {
     clubsTable,
     eventAttendanceTable,
     eventDocumentsTable,
+    eventMembersTable,
     eventsTable,
     expensesTable,
     incomeTable,
@@ -40,6 +41,7 @@ export async function deleteClubPermanently(db: Db, clubId: number): Promise<voi
         await tx.delete(budgetCategoriesTable).where(inArray(budgetCategoriesTable.eventId, eventIds));
         await tx.delete(incomeTable).where(inArray(incomeTable.eventId, eventIds));
         await tx.delete(eventDocumentsTable).where(inArray(eventDocumentsTable.eventId, eventIds));
+        await tx.delete(eventMembersTable).where(inArray(eventMembersTable.eventId, eventIds));
         await tx.delete(eventsTable).where(eq(eventsTable.clubId, clubId));
 
         await tx.delete(usersTable).where(eq(usersTable.clubId, clubId));

@@ -1,5 +1,5 @@
 import type { DbEnv } from "../db/connection";
-import { eventsTable, taskAssignmentsTable, taskAuditLogTable, tasksTable, usersTable } from "../db/schema";
+import { eventMembersTable, eventsTable, taskAssignmentsTable, taskAuditLogTable, tasksTable, usersTable } from "../db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { OffboardedTask } from "../types/user";
 
@@ -47,6 +47,9 @@ export async function offboardMembers(
                 }))
             );
         }
+
+        // Offboarded members drop off every event team, not just this club's tasks.
+        await tx.delete(eventMembersTable).where(inArray(eventMembersTable.userId, memberIds));
 
         await tx
             .update(usersTable)
