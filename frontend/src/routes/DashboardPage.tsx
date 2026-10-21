@@ -79,7 +79,7 @@ function UpcomingTasks() {
         title="Upcoming Tasks"
         loading={tasks.isLoading}
         style={{ display: "flex", flexDirection: "column" }}
-        styles={{ body: { padding: dataVisible ? "0" : undefined, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" } }}
+        styles={{ body: { padding: dataVisible ? "0" : undefined, flex: 1, display: "flex", flexDirection: "column", justifyContent: dataVisible ? "flex-start" : "center" } }}
     >
         { tasks.data && tasks.data.length === 0 ? <EmptyTasks /> : null }
         { tasks.data && tasks.data.length > 0 ? <UpcomingTaskList tasks={tasks.data} /> : null }

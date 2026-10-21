@@ -1,5 +1,5 @@
 
-import {Breadcrumb, Button, Dropdown, Input, Layout, Result, Segmented, Space, Table, type TableProps, theme, Typography} from "antd";
+import {Alert, Breadcrumb, Button, Dropdown, Input, Layout, Result, Segmented, Space, Table, type TableProps, theme, Typography} from "antd";
 import {useUser} from "@/lib/auth.tsx";
 import useSWR from "swr";
 import type {ClubEvent} from "@knot/backend/events";
@@ -157,7 +157,18 @@ function EventsTable(props: { filter: "all" | "active" | "archived"; search: str
         </div>
     }
 
+    const showAssignmentNotice = !isEventManager && !isLoading && data?.length === 0;
+
     return <>
+        { showAssignmentNotice &&
+            <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 24 }}
+                message="You haven't been assigned to any events yet"
+                description="You need to be assigned to an event to see it here. Speak to an executive or admin member of the club."
+            />
+        }
         <Table columns={columns} loading={isLoading} dataSource={tableData} />
         { editingEvent &&
             <EventModal
