@@ -1,3 +1,4 @@
+import { canAccessEvent } from "../services/event-access.ts";
 import { Hono } from "hono";
 import { isAuthenticated, type UserEnv } from "../services/auth.ts";
 import type { DbEnv } from "../db/connection.ts";
@@ -26,6 +27,7 @@ async function loadManageableExpense(db: Db, expenseId: number, user: UserEnv["V
     });
 
     if (!expense || !expense.event || expense.event.clubId !== user.club.id) return null;
+    if (!(await canAccessEvent(db, expense.event.id, user))) return null;
     if (!isExecOrAdmin(user.role) && expense.createdBy !== user.id) return null;
     return expense;
 }

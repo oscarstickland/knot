@@ -1,3 +1,4 @@
+import { eventAccess } from "../services/event-access.ts";
 import { Hono } from "hono";
 import type { DbEnv } from "../db/connection";
 import { isAuthenticated, type UserEnv } from "../services/auth";
@@ -71,7 +72,7 @@ eventAttendanceApp.get("/:eventId{[0-9]+}/summary", isAuthenticated, async (c) =
     const eventId = Number(c.req.param("eventId"));
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -92,7 +93,7 @@ eventAttendanceApp.get("/:eventId{[0-9]+}/check-ins", isAuthenticated, async (c)
     const eventId = Number(c.req.param("eventId"));
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -113,7 +114,7 @@ eventAttendanceApp.put("/:eventId{[0-9]+}/check-ins/:checkInId{[0-9]+}", isAuthe
     const checkInId = Number(c.req.param("checkInId"));
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 

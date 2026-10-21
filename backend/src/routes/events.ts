@@ -34,6 +34,7 @@ import {
 } from "../db/schema.ts";
 import {and, count, eq, inArray, sql} from "drizzle-orm";
 import {describeZodError} from "../types/errors.ts";
+import {eventAccess} from "../services/event-access.ts";
 
 function isExecOrAdmin(role: string): boolean {
     return role === "exec" || role === "admin";
@@ -56,10 +57,10 @@ eventsApp.get("/", async (c) => {
 
     const events = await db.query.eventsTable.findMany({
         where: archivedParam === "true"
-            ? { clubId: user.club.id, archived: true }
+            ? { ...eventAccess(user), archived: true }
             : archivedParam === "false"
-                ? { clubId: user.club.id, archived: false }
-                : { clubId: user.club.id }
+                ? { ...eventAccess(user), archived: false }
+                : eventAccess(user)
     });
 
     const eventIds = events.map((event) => event.id);
@@ -204,7 +205,7 @@ eventsApp.get("/:id{[0-9]+}", async (c) => {
     const user = c.var.user;
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     })
 
     if (!event) throw new HTTPException(404, { message: "Event not found" });
@@ -224,7 +225,7 @@ eventsApp.put("/:id{[0-9]+}", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const existingEvent = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
 
     if (!existingEvent) throw new HTTPException(404, { message: "Event not found or unauthorized" });
@@ -253,7 +254,7 @@ eventsApp.delete("/:id{[0-9]+}", async (c) => {
     if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can delete events" });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found or unauthorized" });
 
@@ -313,7 +314,7 @@ eventsApp.patch("/:id{[0-9]+}/attendance", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const existingEvent = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!existingEvent) throw new HTTPException(404, { message: "Event not found or unauthorized" });
     if (existingEvent.archived) throw new HTTPException(404, { message: "Event not found or unauthorized" });
@@ -415,7 +416,7 @@ eventsApp.get("/:id{[0-9]+}/budget", async (c) => {
     const user = c.var.user;
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -438,7 +439,7 @@ eventsApp.put("/:id{[0-9]+}/budget", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -506,7 +507,7 @@ eventsApp.post("/:id{[0-9]+}/expenses", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: "Invalid payload" });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -542,7 +543,7 @@ eventsApp.post("/:id{[0-9]+}/income", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -566,7 +567,7 @@ eventsApp.get("/:id{[0-9]+}/documents", async (c) => {
     const user = c.var.user;
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -589,7 +590,7 @@ eventsApp.post("/:id{[0-9]+}/documents", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -621,7 +622,7 @@ eventsApp.get("/:id{[0-9]+}/team", async (c) => {
     return c.json(team);
 });
 
-// Replaces the whole team in one go so the picker in the UI can just send what it shows.
+// Replaces the whole team (and optionally who can see the event) in one go, so the picker can just send what it shows.
 eventsApp.put("/:id{[0-9]+}/team", async (c) => {
     const eventId = Number(c.req.param("id"));
     const db = c.get("db");
@@ -632,7 +633,7 @@ eventsApp.put("/:id{[0-9]+}/team", async (c) => {
     const body = await c.req.json();
     const parsed = SetEventTeamSchema.safeParse(body);
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
-    const userIds = parsed.data.userIds;
+    const { userIds, teamWide } = parsed.data;
 
     const event = await db.query.eventsTable.findFirst({
         where: { id: eventId, clubId: user.club.id }
@@ -654,6 +655,9 @@ eventsApp.put("/:id{[0-9]+}/team", async (c) => {
     }
 
     await db.transaction(async (tx) => {
+        if (teamWide !== undefined) {
+            await tx.update(eventsTable).set({ teamWide }).where(eq(eventsTable.id, eventId));
+        }
         await tx.delete(eventMembersTable).where(eq(eventMembersTable.eventId, eventId));
         if (userIds.length > 0) {
             await tx.insert(eventMembersTable).values(userIds.map((userId) => ({ eventId, userId })));
