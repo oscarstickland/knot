@@ -1,3 +1,4 @@
+import type { EventTeamMember } from "@knot/backend/event-team";
 import { useMemo } from "react";
 import { Alert, Col, Row, Skeleton } from "antd";
 import useSWR from "swr";
@@ -89,6 +90,8 @@ function buildStats(event: ClubEvent, overview: EventOverview, now: Date): Stat[
 export function OverviewTab({ event, active, onNavigate }: OverviewTabProps) {
     const user = useUser();
     const isEventManager = user.role === "admin" || user.role === "exec";
+    const { data: team } = useSWR<EventTeamMember[]>(`/events/${event.id}/team`);
+    const canEdit = isEventManager || team?.some((member) => member.id === user.id) === true;
     const { data, error, isLoading } = useSWR<EventOverview, AxiosError>(`/events/${event.id}/overview`, {
         refreshInterval: active ? REFRESH_INTERVAL_MS : 0
     });
@@ -104,7 +107,7 @@ export function OverviewTab({ event, active, onNavigate }: OverviewTabProps) {
 
     const detailsCard = <EventDetailsCard
         event={event}
-        extra={isEventManager && !event.archived ? <EventModal event={event} mode="update" /> : undefined}
+        extra={canEdit && !event.archived ? <EventModal event={event} mode="update" /> : undefined}
     />;
     const teamCard = <TeamCard eventId={event.id} teamWide={event.teamWide} canEdit={isEventManager && !event.archived} />;
     const documentsCard = <OverviewDocumentsCard documents={data.documents} onOpenDocuments={() => onNavigate("documents")} />;

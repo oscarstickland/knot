@@ -34,7 +34,7 @@ import {
 } from "../db/schema.ts";
 import {and, count, eq, inArray, sql} from "drizzle-orm";
 import {describeZodError} from "../types/errors.ts";
-import {eventAccess} from "../services/event-access.ts";
+import {canEditEvent, eventAccess} from "../services/event-access.ts";
 
 function isExecOrAdmin(role: string): boolean {
     return role === "exec" || role === "admin";
@@ -229,13 +229,15 @@ eventsApp.put("/:id{[0-9]+}", async (c) => {
     });
 
     if (!existingEvent) throw new HTTPException(404, { message: "Event not found or unauthorized" });
-    if (existingEvent.archived || ( user.role !== "admin" && user.role !== "exec")) {
+    if (existingEvent.archived || !(await canEditEvent(db, eventId, user))) {
         throw new HTTPException(404, { message: "Event not found or unauthorized" });
     }
 
+    // Visibility is managed through the team endpoint, which stays exec/admin only.
+    const { teamWide: _teamWide, ...details } = parsed.data;
     const [updatedEvent] = await db
         .update(eventsTable)
-        .set(parsed.data)
+        .set(isExecOrAdmin(user.role) ? parsed.data : details)
         .where(and(eq(eventsTable.clubId, user.club.id), eq(eventsTable.id, eventId)))
         .returning();
 
@@ -306,8 +308,6 @@ eventsApp.patch("/:id{[0-9]+}/attendance", async (c) => {
     const eventId = Number(c.req.param("id"));
     const db = c.get("db");
     const user = c.var.user;
-
-    if (user.role !== "admin" && user.role !== "exec") throw new HTTPException(403, { message: "Only club admins and execs can open or close attendance" });
 
     const body = await c.req.json();
     const parsed = SetAttendanceOpenSchema.safeParse(body);

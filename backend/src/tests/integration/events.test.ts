@@ -3,6 +3,7 @@ import { type TestDatabaseHarness, setupHarness } from "../harness.ts";
 import {
     budgetCategoriesTable,
     eventAttendanceTable,
+    eventMembersTable,
     eventsTable,
     expensesTable,
     taskAssignmentsTable,
@@ -250,6 +251,35 @@ describe("Database Integration Test", () => {
         expect(updatedEvent!.expectedAttendees).toBeNull();
     });
 
+    it("allows standard users to update events they are assigned to, without changing visibility", async () => {
+        const app = await harness.setupApp();
+        const club = await harness.setupClub("Club");
+        const { user, cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
+
+        const [event] = await harness.db
+            .insert(eventsTable)
+            .values({ name: "Event", location: "Main Hall", start: new Date(), end: new Date(Date.now() + 5000), clubId: club.id })
+            .returning();
+        await harness.db.insert(eventMembersTable).values({ eventId: event!.id, userId: user.id });
+
+        const res = await app.request(`/api/events/${event!.id}`, {
+            method: "PUT",
+            headers: { cookie },
+            body: JSON.stringify({
+                name: "Renamed",
+                location: "Main Hall",
+                start: new Date(Date.now() + 1000),
+                end: new Date(Date.now() + 6000),
+                teamWide: false
+            })
+        });
+        expect(res.status).toBe(200);
+
+        const updated = await harness.db.query.eventsTable.findFirst({ where: { id: event!.id } });
+        expect(updated!.name).toBe("Renamed");
+        expect(updated!.teamWide).toBe(true);
+    });
+
     it("prevents standard users from updating events", async () => {
         const app = await harness.setupApp();
         const club = await harness.setupClub("Club");
@@ -388,7 +418,7 @@ describe("Database Integration Test", () => {
             expect(updatedEvent!.attendanceOpen).toBe(false);
         });
 
-        it("prevents standard users from opening attendance for an event", async () => {
+        it("allows standard users to open attendance for an event they can see", async () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const { cookie } = await harness.setupUser("test@test.com", "standard", club.id, "User");
@@ -404,12 +434,12 @@ describe("Database Integration Test", () => {
                 headers: { cookie },
                 body: JSON.stringify({ attendanceOpen: true })
             });
-            expect(res.status).toBe(403);
+            expect(res.status).toBe(200);
 
-            const unchangedEvent = await harness.db.query.eventsTable.findFirst({
+            const updatedEvent = await harness.db.query.eventsTable.findFirst({
                 where: { id: event!.id }
             });
-            expect(unchangedEvent!.attendanceOpen).toBe(false);
+            expect(updatedEvent!.attendanceOpen).toBe(true);
         });
 
         it("rejects a non-boolean attendanceOpen value", async () => {
