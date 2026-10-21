@@ -21,9 +21,11 @@ eventAttendanceApp.get("/:slug/info", async (c) => {
 
     const event = await db.query.eventsTable.findFirst({
         where: { slug },
-        columns: { slug: true, name: true, start: true, end: true, attendanceOpen: true }
+        columns: { slug: true, name: true, start: true, end: true, attendanceOpen: true },
+        with: { club: { columns: { archivedAt: true } } }
     });
-    if (!event) throw new HTTPException(404, { message: "Event not found" });
+    // Archived clubs are switched off, including their public check-in pages
+    if (!event || event.club?.archivedAt) throw new HTTPException(404, { message: "Event not found" });
 
     return c.json(EventAttendanceInfoSchema.parse(event));
 });
@@ -37,9 +39,10 @@ eventAttendanceApp.post("/:slug/register", async (c) => {
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
 
     const event = await db.query.eventsTable.findFirst({
-        where: { slug }
+        where: { slug },
+        with: { club: { columns: { archivedAt: true } } }
     });
-    if (!event) throw new HTTPException(404, { message: "Event not found" });
+    if (!event || event.club?.archivedAt) throw new HTTPException(404, { message: "Event not found" });
 
     if (!event.attendanceOpen) throw new HTTPException(403, { message: "Attendance is not open for this event" });
 
