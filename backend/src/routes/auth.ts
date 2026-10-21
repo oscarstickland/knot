@@ -5,10 +5,10 @@ import type z from "zod";
 import { sign } from "hono/jwt";
 import { deleteCookie, setCookie } from "hono/cookie";
 
-import { LoginFormSchema, type CurrentUserData } from "../types/auth";
+import { LoginFormSchema } from "../types/auth";
 import { type DbEnv } from "../db/connection";
 import { usersTable } from "../db/schema";
-import {AUTH_COOKIE_NAME, fetchCurrentUserData, JWT_SECRET, verifyPassword} from "../services/auth";
+import {AUTH_COOKIE_NAME, AUTH_TOKEN_TTL_SECONDS, fetchSessionUserData, JWT_SECRET, verifyPassword} from "../services/auth";
 import { JWTUserSchema } from "../types/auth";
 
 const authApp = new Hono<DbEnv>();
@@ -33,12 +33,18 @@ authApp.post("/login", zValidator("json", LoginFormSchema), async (c) => {
     if (user.status === "offboarded")
         return c.json({ message: "Incorrect email or password" }, 401);
 
+    // Rejects members of archived clubs before a cookie is issued
+    const currentUserData = await fetchSessionUserData({ id: user.id, email: user.email }, db);
+
     // Create JWT
     const tokenData: z.infer<typeof JWTUserSchema> = {
         id: user.id,
         email: user.email
     };
-    const token = await sign({data: JSON.stringify(tokenData)}, JWT_SECRET);
+    const token = await sign({
+        data: JSON.stringify(tokenData),
+        exp: Math.floor(Date.now() / 1000) + AUTH_TOKEN_TTL_SECONDS
+    }, JWT_SECRET);
     
     // Set Cookie
     setCookie(c, AUTH_COOKIE_NAME, token, {
@@ -47,7 +53,6 @@ authApp.post("/login", zValidator("json", LoginFormSchema), async (c) => {
         httpOnly: true
     });
 
-    const currentUserData = await fetchCurrentUserData(tokenData, db);
     return c.json(currentUserData, 200);
 });
 

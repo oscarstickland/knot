@@ -1,7 +1,10 @@
-import type { usersTable } from "../db/schema.ts";
+import type { UserRole, usersTable } from "../db/schema.ts";
 import { z } from "zod";
 
-export type ClubMember = Omit<typeof usersTable.$inferSelect, "password">;
+export type ClubMember = Omit<typeof usersTable.$inferSelect, "password" | "role" | "clubId"> & {
+    role: UserRole;
+    clubId: number;
+};
 
 export const UpdateMemberSchema = z.object({
     name: z.string().min(1, "Name cannot be empty"),

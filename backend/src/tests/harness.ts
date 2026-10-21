@@ -22,7 +22,7 @@ export interface TestDatabaseHarness {
 
     setupApp: () => Promise<ReturnType<typeof createApp>>,
     setupClub: (name: string) => ReturnType<typeof setupClub>,
-    setupUser: (email: string, role: UserRole, club: number, name: string) => ReturnType<typeof setupUser>
+    setupUser: (email: string, role: UserRole | "superadmin", club: number | null, name?: string) => ReturnType<typeof setupUser>
 }
 
 /**
@@ -69,7 +69,7 @@ export async function setupHarness(): Promise<TestDatabaseHarness> {
         },
         setupApp: () => setupApp(db),
         setupClub: (name: string) => setupClub(db, name),
-        setupUser: (email: string, role: UserRole, club: number, name: string = "User") => setupUser(db, email, role, club, name),
+        setupUser: (email: string, role: UserRole | "superadmin", club: number | null, name: string = "User") => setupUser(db, email, role, club, name),
     }
 }
 
@@ -109,7 +109,7 @@ async function setupClub(db: TestDatabaseHarness["db"], name: string = "Club") {
  * @param club Club Id
  * @param name Optional, name of user, defaults to User
  */
-async function setupUser(db: TestDatabaseHarness["db"], email: string, role: UserRole, club: number, name: string = "User") {
+async function setupUser(db: TestDatabaseHarness["db"], email: string, role: UserRole | "superadmin", club: number | null, name: string = "User") {
     const [user] = await db.insert(usersTable).values({
         email: email, password: "_", name: name, role: role, clubId: club
     }).returning();

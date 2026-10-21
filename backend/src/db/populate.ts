@@ -46,6 +46,15 @@ async function generateData() {
     const [insertedClub1] = await db.insert(clubsTable).values(club1).returning();
 
     
+    console.log("-- Inserting Super Admin");
+    await db.insert(usersTable).values({
+        name: "Platform Admin",
+        email: "superadmin@gmail.com",
+        password: await hashPassword("password"),
+        role: "superadmin",
+        clubId: null
+    });
+
     console.log("-- Inserting Users");
     const user1: typeof usersTable.$inferInsert = {
         name: "Caleb Lau",
