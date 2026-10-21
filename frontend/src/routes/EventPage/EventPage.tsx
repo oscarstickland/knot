@@ -3,6 +3,7 @@ import {useState} from "react";
 import {useNavigate, useParams, useSearchParams} from "react-router";
 import useSWR, {mutate} from "swr";
 import {type ClubEvent, UpdateEventSchema} from "@knot/backend/events";
+import type {EventTeamMember} from "@knot/backend/event-team";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import {EventModal} from "@/components/EventModal.tsx";
@@ -48,6 +49,7 @@ function EventInformation(props: { id: string }) {
     const [searchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState(searchParams.get("tab") ?? "overview");
     const { data, error, isLoading } = useSWR<ClubEvent, AxiosError>(props.id ? `/events/${props.id}` : null);
+    const { data: team } = useSWR<EventTeamMember[]>(props.id ? `/events/${props.id}/team` : null);
 
     if (isLoading) return <Spin />
     if (error || !data) {
@@ -63,6 +65,7 @@ function EventInformation(props: { id: string }) {
     const start = dayjs(data.start)
     const end = dayjs(data.end)
     const isEventManager = user.role === "admin" || user.role === "exec";
+    const canEdit = isEventManager || team?.some((member) => member.id === user.id) === true;
 
     const toggleArchived = () => {
         AxiosInstance.patch(`/events/${data.id}/archive`, { archived: !data.archived })
@@ -163,14 +166,17 @@ function EventInformation(props: { id: string }) {
                 </Text>
             </div>
 
-            { isEventManager
-                ? <Space wrap>
+            <Space wrap>
+                { !data.archived &&
                     <Button
                         icon={data.attendanceOpen ? <LockOutlined /> : <UnlockOutlined />}
                         onClick={toggleAttendanceOpen}
                     >
                         {data.attendanceOpen ? "Close Attendance" : "Open Attendance"}
                     </Button>
+                }
+                { !isEventManager && canEdit && !data.archived && <EventModal event={data} mode={"update"} /> }
+                { isEventManager && <>
                     <Button icon={<InboxOutlined />} onClick={toggleArchived}>
                         {data.archived ? "Unarchive" : "Archive"}
                     </Button>
@@ -185,9 +191,8 @@ function EventInformation(props: { id: string }) {
                     >
                         <Button danger icon={<DeleteOutlined />}>Delete</Button>
                     </Popconfirm>
-                </Space>
-                : ""
-            }
+                </> }
+            </Space>
         </div>
 
         <Tabs items={items} activeKey={activeTab} onChange={setActiveTab} style={{ paddingTop: "1em" }} />

@@ -55,10 +55,50 @@ describe("Task Integration Test", () => {
     }
 
     describe("POST /api/tasks (create)", () => {
-        it("prevents standard users from creating a task", async () => {
+        it("allows a standard user to create a task with a dependency", async () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const prerequisite = await setupTask(event.id, admin.id);
+
+            const res = await app.request("/api/tasks", {
+                method: "POST",
+                headers: { cookie },
+                body: JSON.stringify({
+                    eventId: event.id, title: "Task", description: "Description", priority: "medium",
+                    assigneeIds: [], dependencyIds: [prerequisite.id]
+                })
+            });
+            expect(res.status).toBe(201);
+            const dependencies = await harness.db.query.taskDependenciesTable.findMany({ where: { dependsOnTaskId: prerequisite.id } });
+            expect(dependencies).toHaveLength(1);
+        });
+
+        it("prevents a standard user from assigning users when creating a task", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: other } = await harness.setupUser("other@test.com", "standard", club.id, "Other");
+            const { cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+
+            const res = await app.request("/api/tasks", {
+                method: "POST",
+                headers: { cookie },
+                body: JSON.stringify({
+                    eventId: event.id, title: "Task", description: "Description", priority: "medium",
+                    assigneeIds: [other.id], dependencyIds: []
+                })
+            });
+            expect(res.status).toBe(403);
+        });
+
+        it("prevents a standard user outside the event team from creating a task", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            await harness.db.update(eventsTable).set({ teamWide: false }).where(eq(eventsTable.id, event.id));
             const { cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
 
             const res = await app.request("/api/tasks", {
@@ -69,7 +109,7 @@ describe("Task Integration Test", () => {
                     assigneeIds: [], dependencyIds: []
                 })
             });
-            expect(res.status).toBe(403);
+            expect(res.status).toBe(404);
         });
 
         it.each(["exec", "admin"])("allows %s to create a task", async (role) => {
@@ -158,12 +198,34 @@ describe("Task Integration Test", () => {
     });
 
     describe("PUT /api/tasks/:id (update)", () => {
-        it("prevents standard users from updating a task", async () => {
+        it("allows a standard user to update a task and its dependencies", async () => {
             const app = await harness.setupApp();
             const club = await harness.setupClub("Club");
             const event = await setupEvent(club.id);
             const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
             const { cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const task = await setupTask(event.id, admin.id);
+            const prerequisite = await setupTask(event.id, admin.id);
+
+            const res = await app.request(`/api/tasks/${task.id}`, {
+                method: "PUT",
+                headers: { cookie },
+                body: JSON.stringify({
+                    eventId: event.id, title: "Updated", description: "Description", priority: "medium",
+                    assigneeIds: [], dependencyIds: [prerequisite.id]
+                })
+            });
+            expect(res.status).toBe(200);
+            const dependencies = await harness.db.query.taskDependenciesTable.findMany({ where: { taskId: task.id } });
+            expect(dependencies.map((dependency) => dependency.dependsOnTaskId)).toEqual([prerequisite.id]);
+        });
+
+        it("prevents a standard user from changing a task's assignees", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user, cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
             const task = await setupTask(event.id, admin.id);
 
             const res = await app.request(`/api/tasks/${task.id}`, {
@@ -171,10 +233,54 @@ describe("Task Integration Test", () => {
                 headers: { cookie },
                 body: JSON.stringify({
                     eventId: event.id, title: "Updated", description: "Description", priority: "medium",
-                    assigneeIds: [], dependencyIds: []
+                    assigneeIds: [user.id], dependencyIds: []
                 })
             });
             expect(res.status).toBe(403);
+        });
+
+        it("prevents a standard user removing an assignee by repeating another id", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user, cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const { user: other } = await harness.setupUser("other@test.com", "standard", club.id, "Other");
+            const task = await setupTask(event.id, admin.id);
+            await assignUser(task.id, user.id);
+            await assignUser(task.id, other.id);
+
+            const res = await app.request(`/api/tasks/${task.id}`, {
+                method: "PUT",
+                headers: { cookie },
+                body: JSON.stringify({
+                    eventId: event.id, title: "Updated", description: "Description", priority: "medium",
+                    assigneeIds: [user.id, user.id], dependencyIds: []
+                })
+            });
+            expect(res.status).toBe(403);
+            const assignments = await harness.db.query.taskAssignmentsTable.findMany({ where: { taskId: task.id } });
+            expect(assignments).toHaveLength(2);
+        });
+
+        it("keeps existing assignees when a standard user edits a task", async () => {
+            const app = await harness.setupApp();
+            const club = await harness.setupClub("Club");
+            const event = await setupEvent(club.id);
+            const { user: admin } = await harness.setupUser("admin@test.com", "admin", club.id, "Admin");
+            const { user, cookie } = await harness.setupUser("standard@test.com", "standard", club.id, "Standard");
+            const task = await setupTask(event.id, admin.id);
+            await assignUser(task.id, user.id);
+
+            const res = await app.request(`/api/tasks/${task.id}`, {
+                method: "PUT",
+                headers: { cookie },
+                body: JSON.stringify({
+                    eventId: event.id, title: "Updated", description: "Description", priority: "medium",
+                    assigneeIds: [user.id], dependencyIds: []
+                })
+            });
+            expect(res.status).toBe(200);
         });
 
         it("prevents moving a task to a different event", async () => {

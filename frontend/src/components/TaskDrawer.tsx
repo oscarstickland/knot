@@ -32,7 +32,7 @@ type TaskFormInput = z.input<typeof CreateTaskSchema>;
 type TaskFormOutput = z.output<typeof CreateTaskSchema>;
 
 type TaskDrawerProps =
-    | { mode: "create"; eventId: number; task?: never; open?: boolean; onOpenChange?: (open: boolean) => void }
+    | { mode: "create"; eventId: number; task?: never; isTaskManager: boolean; open?: boolean; onOpenChange?: (open: boolean) => void }
     | {
         mode: "update";
         eventId: number;
@@ -46,7 +46,8 @@ export function TaskDrawer(props: TaskDrawerProps) {
     const { mode, eventId } = props;
     const isEditMode = mode === "update";
     const task = isEditMode ? props.task : undefined;
-    const canManage = isEditMode ? props.isTaskManager : true;
+    // Anyone on the event can create and edit tasks; only execs and admins choose assignees.
+    const canAssign = props.isTaskManager;
 
     const isControlled = props.open !== undefined;
     const [internalOpen, setInternalOpen] = useState(false);
@@ -56,7 +57,7 @@ export function TaskDrawer(props: TaskDrawerProps) {
     const [view, setView] = useState<"summary" | "form">(isEditMode ? "summary" : "form");
     const [api, contextHolder] = useAppNotification();
 
-    const { data: members } = useSWR<ClubMember[]>(canManage ? "/user" : null);
+    const { data: members } = useSWR<ClubMember[]>(canAssign ? "/user" : null);
     const { data: eventTasks } = useSWR<TaskWithRelations[]>(`/tasks?eventId=${eventId}`);
     const dependencyOptions = buildDependencyOptions(eventTasks ?? [], task?.id);
 
@@ -137,7 +138,7 @@ export function TaskDrawer(props: TaskDrawerProps) {
                 view === "summary"
                     ? <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
                         <Button onClick={handleClose}>Close</Button>
-                        {canManage && <Button type="primary" icon={<EditOutlined />} onClick={() => setView("form")}>Edit</Button>}
+                        <Button type="primary" icon={<EditOutlined />} onClick={() => setView("form")}>Edit</Button>
                     </div>
                     : <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
                         <Button onClick={isEditMode ? handleCancelEdit : handleClose}>Cancel</Button>
@@ -200,7 +201,7 @@ export function TaskDrawer(props: TaskDrawerProps) {
                         </Form.Item>
                     </div>
 
-                    <Form.Item label="Assignees">
+                    <Form.Item label="Assignees" help={canAssign ? undefined : "Only execs and admins can assign people to tasks"}>
                         <Controller
                             name="assigneeIds"
                             control={control}
@@ -210,7 +211,10 @@ export function TaskDrawer(props: TaskDrawerProps) {
                                     mode="multiple"
                                     showSearch={{ optionFilterProp: "label" }}
                                     placeholder="Assign club members"
-                                    options={(members ?? []).map((member) => ({ label: member.name, value: member.id }))}
+                                    disabled={!canAssign}
+                                    options={canAssign
+                                        ? (members ?? []).map((member) => ({ label: member.name, value: member.id }))
+                                        : (task?.assignments ?? []).map((assignment) => ({ label: assignment.user.name, value: assignment.userId }))}
                                 />
                             )}
                         />

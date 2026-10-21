@@ -23,3 +23,14 @@ export async function canAccessEvent(db: Db, eventId: number, user: SessionUser)
     });
     return event !== undefined;
 }
+
+// Execs and admins can edit any event; standard members can edit events they are assigned to.
+export async function canEditEvent(db: Db, eventId: number, user: SessionUser): Promise<boolean> {
+    if (user.role !== "standard") return true;
+
+    const assignment = await db.query.eventMembersTable.findFirst({
+        where: { eventId, userId: user.id },
+        columns: { eventId: true }
+    });
+    return assignment !== undefined;
+}

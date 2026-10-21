@@ -79,6 +79,17 @@ async function isAssignedToTask(db: Db, taskId: number, userId: number): Promise
     return !!assignment;
 }
 
+// Anyone who can see an event can create and edit its tasks, but only execs and
+// admins decide who they are assigned to. Standard users must leave assignees as-is.
+function assertCanAssign(role: string, requestedIds: number[], currentIds: number[] = []) {
+    if (isExecOrAdmin(role)) return;
+
+    const requested = new Set(requestedIds);
+    const current = new Set(currentIds);
+    const unchanged = requested.size === current.size && [...requested].every((id) => current.has(id));
+    if (!unchanged) throw new HTTPException(403, { message: "Only club admins and execs can assign tasks to users" });
+}
+
 async function assertUsersInClub(db: Db, userIds: number[], clubId: number) {
     if (userIds.length === 0) return;
 
@@ -208,11 +219,11 @@ tasksApp.get("/:id{[0-9]+}", async (c) => {
 tasksApp.post("/", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can create tasks" });
 
     const body = await c.req.json();
     const parsed = CreateTaskSchema.safeParse(body);
     if (!parsed.success) throw new HTTPException(400, { message: describeZodError(parsed.error) });
+    assertCanAssign(user.role, parsed.data.assigneeIds);
 
     const event = await db.query.eventsTable.findFirst({
         where: { id: parsed.data.eventId, ...eventAccess(user) }
@@ -265,7 +276,6 @@ tasksApp.post("/", async (c) => {
 tasksApp.put("/:id{[0-9]+}", async (c) => {
     const user = c.var.user;
     const db = c.get("db");
-    if (!isExecOrAdmin(user.role)) throw new HTTPException(403, { message: "Only club admins and execs can edit tasks" });
 
     const taskId = Number(c.req.param("id"));
     const body = await c.req.json();
@@ -274,6 +284,10 @@ tasksApp.put("/:id{[0-9]+}", async (c) => {
 
     const existingTask = await loadClubTask(db, taskId, user);
     if (!existingTask) throw new HTTPException(404, { message: "Task not found" });
+
+    const existingAssigneeIds = (await db.query.taskAssignmentsTable.findMany({ where: { taskId } }))
+        .map((assignment) => assignment.userId);
+    assertCanAssign(user.role, parsed.data.assigneeIds, existingAssigneeIds);
     if (parsed.data.eventId !== existingTask.eventId) {
         throw new HTTPException(400, { message: "A task cannot be moved to a different event" });
     }

@@ -58,7 +58,7 @@ export function TasksSection(props: { eventId: number }) {
             justifyContent: 'flex-end',
             paddingBottom: "16px"
         }}>
-            { isTaskManager ? <TaskDrawer mode="create" eventId={props.eventId} /> : "" }
+            <TaskDrawer mode="create" eventId={props.eventId} isTaskManager={isTaskManager} />
         </div>
 
         <Table
