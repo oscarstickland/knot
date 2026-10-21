@@ -5,6 +5,7 @@ import {
     budgetCategoriesTable,
     clubsTable,
     eventDocumentsTable,
+    eventMembersTable,
     eventsTable,
     expensesTable,
     incomeTable,
@@ -280,6 +281,13 @@ async function generateData() {
             url: "https://docs.google.com/spreadsheets/d/example-roster",
             addedBy: insertedUser2!.id
         }
+    ]);
+
+    console.log("-- Inserting Event Team");
+    await db.insert(eventMembersTable).values([
+        { eventId: insertedEvent1!.id, userId: insertedUser1!.id },
+        { eventId: insertedEvent1!.id, userId: insertedUser2!.id },
+        { eventId: insertedEvent1!.id, userId: insertedUser3!.id }
     ]);
 
     // Other events reuse category names (with different case/whitespace) so the club-wide category view merges them.
