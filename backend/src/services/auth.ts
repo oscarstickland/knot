@@ -8,11 +8,12 @@ import { HTTPException } from "hono/http-exception";
 import { getCookie } from "hono/cookie";
 import {relations, usersTable} from "../db/schema";
 import { and, eq } from "drizzle-orm";
-import { decode } from "hono/jwt";
+import { verify } from "hono/jwt";
 import type {NodePgDatabase} from "drizzle-orm/node-postgres";
 
 export const AUTH_COOKIE_NAME = "KnotAuth";
 export const JWT_SECRET = process.env.JWT_SECRET!;
+export const AUTH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 export type UserEnv = {
     Variables: {
@@ -33,15 +34,14 @@ async function authenticate(c: Context, db: NodePgDatabase<typeof relations>): P
     const jwt = getCookie(c, AUTH_COOKIE_NAME);
     if (!jwt) throw new HTTPException(401);
 
-    // Decode token and parse JSON
-    const token = await decode(jwt);
+    // Verify the signature (and exp, when present) before trusting anything in the token
     let payload;
-
     try {
-        if (!token.payload.data) throw new HTTPException(401);
-        payload = JSON.parse(token.payload.data as string);
+        const token = await verify(jwt, JWT_SECRET, "HS256");
+        if (!token.data) throw new HTTPException(401);
+        payload = JSON.parse(token.data as string);
     } catch {
-        console.error("Unable to parse the JSON data in JWT cookie.")
+        console.error("Unable to verify the JWT cookie.")
         throw new HTTPException(401);
     }
 
