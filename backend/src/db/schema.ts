@@ -3,7 +3,9 @@ import {boolean, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, te
 
 export const userRoles = ["standard", "exec", "admin"] as const;
 export type UserRole = (typeof userRoles)[number];
-export const rolesEnum = pgEnum("roles", userRoles);
+// Club-less platform account. Kept out of `userRoles` so every club-scoped code path stays typed to club roles only.
+export const SUPER_ADMIN_ROLE = "superadmin" as const;
+export const rolesEnum = pgEnum("roles", [...userRoles, SUPER_ADMIN_ROLE]);
 
 export const userStatuses = ["active", "offboarded"] as const;
 export type UserStatus = (typeof userStatuses)[number];
@@ -20,7 +22,9 @@ export const taskAuditActionEnum = pgEnum("task_audit_action", taskAuditActions)
 
 export const clubsTable = pgTable("clubs", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    name: varchar({ length: 255 }).notNull()
+    name: varchar({ length: 255 }).notNull(),
+    // Set when a super admin archives the club. Members of archived clubs cannot log in.
+    archivedAt: timestamp("archived_at", { mode: "date", withTimezone: true })
 });
 
 export const usersTable = pgTable("users", {
@@ -30,7 +34,8 @@ export const usersTable = pgTable("users", {
     password: varchar({ length: 500 }).notNull(),
     role: rolesEnum().default("standard").notNull(),
     status: userStatusEnum().default("active").notNull(),
-    clubId: integer("club_id").notNull(),
+    // Null only for super admins.
+    clubId: integer("club_id"),
 });
 
 export const eventsTable = pgTable("events", {
