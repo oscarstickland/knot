@@ -6,13 +6,13 @@ import {
 } from "@knot/backend/tasks";
 import type { ClubMember } from "@knot/backend/user";
 import { useEffect, useState } from "react";
-import { Avatar, Button, DatePicker, Drawer, Form, Input, Select, Space, Tag, Typography } from "antd";
+import { Avatar, Button, DatePicker, Drawer, Form, Input, Popconfirm, Select, Space, Tag, Typography } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosInstance } from "@/lib/fetcher.tsx";
 import useSWR, { mutate } from "swr";
 import dayjs from "dayjs";
-import { EditOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, InboxOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
 import { z } from "zod";
 import { useAppNotification } from "@/lib/useAppNotification";
 import { priorityColor, TaskStatusPill } from "@/components/TaskStatusPill.tsx";
@@ -127,6 +127,42 @@ export function TaskDrawer(props: TaskDrawerProps) {
         })
     }
 
+    // Archived and deleted tasks drop out of every task list, plus event progress counts.
+    const refreshTaskLists = () => Promise.all([
+        mutate((key) => typeof key === "string" && key.startsWith("/tasks")),
+        mutate((key) => typeof key === "string" && key.startsWith("/events"))
+    ]);
+
+    const toggleArchived = () => {
+        AxiosInstance.patch(`/tasks/${task!.id}/archive`, { archived: !task!.archived })
+            .then(async () => {
+                await refreshTaskLists();
+                handleClose();
+                api['success']({
+                    title: "Success",
+                    description: `Task has been ${task!.archived ? "unarchived" : "archived"}.`
+                });
+            })
+            .catch((err) => {
+                const message = err?.response?.data?.message
+                    ?? `Task could not be ${task!.archived ? "unarchived" : "archived"}.`;
+                api['error']({ title: "Error", description: message });
+            });
+    }
+
+    const deleteTask = () => {
+        return AxiosInstance.delete(`/tasks/${task!.id}`)
+            .then(async () => {
+                handleClose();
+                await refreshTaskLists();
+                api['success']({ title: "Success", description: "Task has been deleted." });
+            })
+            .catch((err) => {
+                const message = err?.response?.data?.message ?? "Task could not be deleted.";
+                api['error']({ title: "Error", description: message });
+            });
+    }
+
     return <>
         {contextHolder}
         <Drawer
@@ -136,9 +172,29 @@ export function TaskDrawer(props: TaskDrawerProps) {
             width={480}
             footer={
                 view === "summary"
-                    ? <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
-                        <Button onClick={handleClose}>Close</Button>
-                        <Button type="primary" icon={<EditOutlined />} onClick={() => setView("form")}>Edit</Button>
+                    ? <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5em" }}>
+                        <Space>
+                            {isEditMode && props.isTaskManager && <>
+                                <Button icon={<InboxOutlined />} onClick={toggleArchived}>
+                                    {task!.archived ? "Unarchive" : "Archive"}
+                                </Button>
+                                <Popconfirm
+                                    title="Delete task"
+                                    description="This permanently deletes the task along with its comments and dependency links. This can't be undone. Archive it instead if you only want it hidden."
+                                    onConfirm={deleteTask}
+                                    okText="Delete"
+                                    okButtonProps={{ danger: true }}
+                                >
+                                    <Button danger icon={<DeleteOutlined />}>Delete</Button>
+                                </Popconfirm>
+                            </>}
+                        </Space>
+                        <Space>
+                            <Button onClick={handleClose}>Close</Button>
+                            {!task?.archived &&
+                                <Button type="primary" icon={<EditOutlined />} onClick={() => setView("form")}>Edit</Button>
+                            }
+                        </Space>
                     </div>
                     : <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5em" }}>
                         <Button onClick={isEditMode ? handleCancelEdit : handleClose}>Cancel</Button>
@@ -254,6 +310,7 @@ function TaskSummary(props: { task: TaskWithRelations }) {
     return <Space direction="vertical" size="large" style={{ width: "100%" }}>
         <Space wrap>
             <Tag color={priorityColor[task.priority]}>{task.priority.toUpperCase()}</Tag>
+            {task.archived && <Tag>Archived</Tag>}
             <TaskStatusPill task={task} />
             <TaskDependencyIndicator task={task} />
         </Space>
