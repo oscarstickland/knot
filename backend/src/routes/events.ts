@@ -608,7 +608,7 @@ eventsApp.get("/:id{[0-9]+}/team", async (c) => {
     const user = c.var.user;
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
@@ -636,7 +636,7 @@ eventsApp.put("/:id{[0-9]+}/team", async (c) => {
     const { userIds, teamWide } = parsed.data;
 
     const event = await db.query.eventsTable.findFirst({
-        where: { id: eventId, clubId: user.club.id }
+        where: { id: eventId, ...eventAccess(user) }
     });
     if (!event) throw new HTTPException(404, { message: "Event not found" });
 
